@@ -64,4 +64,6 @@ class EventEntity(Entity):
         attrs["event_type"] = event.event_type
         if event.event_type == EVENT_TYPE_DECEASED and event.date_of_death:
             attrs["date_of_death"] = event.date_of_death.isoformat()
+        if event.phone_number:
+            attrs["phone_number"] = event.phone_number
         return attrs

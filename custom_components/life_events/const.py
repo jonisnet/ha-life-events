@@ -23,6 +23,9 @@ CONF_DATE = "date"
 CONF_DATE_OF_DEATH = "date_of_death"
 CONF_ICON = "icon"
 CONF_ATTRIBUTES = "attributes"
+# Only meaningful for birthday/anniversary events (enforced in the UI, not
+# the storage model - a deceased event just never gets one set).
+CONF_PHONE_NUMBER = "phone_number"
 
 # Legacy YAML fields (kept so existing configuration.yaml keeps validating during import)
 CONF_UNIQUE_ID = "unique_id"
@@ -70,4 +73,13 @@ IMPORT_MODE_REPLACE = "replace"
 FORMAT_CSV = "csv"
 FORMAT_JSON = "json"
 
-CSV_FIELDNAMES = [CONF_ID, CONF_NAME, CONF_EVENT_TYPE, CONF_DATE, CONF_DATE_OF_DEATH, CONF_ICON, CONF_ATTRIBUTES]
+CSV_FIELDNAMES = [
+    CONF_ID,
+    CONF_NAME,
+    CONF_EVENT_TYPE,
+    CONF_DATE,
+    CONF_DATE_OF_DEATH,
+    CONF_ICON,
+    CONF_PHONE_NUMBER,
+    CONF_ATTRIBUTES,
+]

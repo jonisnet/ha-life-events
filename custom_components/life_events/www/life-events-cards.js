@@ -35,6 +35,120 @@
     deceased: "mdi:flower",
   };
 
+  // Event types the phone number field applies to (not "deceased").
+  const PHONE_EVENT_TYPES = ["birthday", "anniversary"];
+
+  // [ISO 3166-1 alpha-2, ITU calling code, name]. Sorted with NL first (the
+  // default selection), then alphabetically by name. Countries sharing a
+  // calling code (NANP, several African/Caribbean +1 territories, Russia/
+  // Kazakhstan +7, etc.) are listed as separate, individually selectable
+  // entries for clarity, same as most international phone-input widgets.
+  const COUNTRY_CODES = [
+    ["NL", "31", "Nederland"],
+    ["AF", "93", "Afghanistan"], ["AL", "355", "Albanië"], ["DZ", "213", "Algerije"],
+    ["AS", "1684", "Amerikaans-Samoa"], ["AD", "376", "Andorra"], ["AO", "244", "Angola"],
+    ["AI", "1264", "Anguilla"], ["AG", "1268", "Antigua en Barbuda"], ["AR", "54", "Argentinië"],
+    ["AM", "374", "Armenië"], ["AW", "297", "Aruba"], ["AU", "61", "Australië"],
+    ["AT", "43", "Oostenrijk"], ["AZ", "994", "Azerbeidzjan"], ["BS", "1242", "Bahama's"],
+    ["BH", "973", "Bahrein"], ["BD", "880", "Bangladesh"], ["BB", "1246", "Barbados"],
+    ["BY", "375", "Wit-Rusland"], ["BE", "32", "België"], ["BZ", "501", "Belize"],
+    ["BJ", "229", "Benin"], ["BM", "1441", "Bermuda"], ["BT", "975", "Bhutan"],
+    ["BO", "591", "Bolivia"], ["BA", "387", "Bosnië en Herzegovina"], ["BW", "267", "Botswana"],
+    ["BR", "55", "Brazilië"], ["IO", "246", "Brits Indische Oceaanterritorium"],
+    ["VG", "1284", "Britse Maagdeneilanden"], ["BN", "673", "Brunei"], ["BG", "359", "Bulgarije"],
+    ["BF", "226", "Burkina Faso"], ["BI", "257", "Burundi"], ["KH", "855", "Cambodja"],
+    ["CM", "237", "Kameroen"], ["CA", "1", "Canada"], ["CV", "238", "Kaapverdië"],
+    ["KY", "1345", "Kaaimaneilanden"], ["CF", "236", "Centraal-Afrikaanse Republiek"],
+    ["TD", "235", "Tsjaad"], ["CL", "56", "Chili"], ["CN", "86", "China"],
+    ["CX", "61", "Christmaseiland"], ["CO", "57", "Colombia"], ["KM", "269", "Comoren"],
+    ["CG", "242", "Congo-Brazzaville"], ["CD", "243", "Congo-Kinshasa"], ["CK", "682", "Cookeilanden"],
+    ["CR", "506", "Costa Rica"], ["CI", "225", "Ivoorkust"], ["HR", "385", "Kroatië"],
+    ["CU", "53", "Cuba"], ["CW", "599", "Curaçao"], ["CY", "357", "Cyprus"],
+    ["CZ", "420", "Tsjechië"], ["DK", "45", "Denemarken"], ["DJ", "253", "Djibouti"],
+    ["DM", "1767", "Dominica"], ["DO", "1809", "Dominicaanse Republiek"], ["EC", "593", "Ecuador"],
+    ["EG", "20", "Egypte"], ["SV", "503", "El Salvador"], ["GQ", "240", "Equatoriaal-Guinea"],
+    ["ER", "291", "Eritrea"], ["EE", "372", "Estland"], ["SZ", "268", "Eswatini"],
+    ["ET", "251", "Ethiopië"], ["FK", "500", "Falklandeilanden"], ["FO", "298", "Faeröer"],
+    ["FJ", "679", "Fiji"], ["FI", "358", "Finland"], ["FR", "33", "Frankrijk"],
+    ["GF", "594", "Frans-Guyana"], ["PF", "689", "Frans-Polynesië"], ["GA", "241", "Gabon"],
+    ["GM", "220", "Gambia"], ["GE", "995", "Georgië"], ["DE", "49", "Duitsland"],
+    ["GH", "233", "Ghana"], ["GI", "350", "Gibraltar"], ["GR", "30", "Griekenland"],
+    ["GL", "299", "Groenland"], ["GD", "1473", "Grenada"], ["GP", "590", "Guadeloupe"],
+    ["GU", "1671", "Guam"], ["GT", "502", "Guatemala"], ["GN", "224", "Guinee"],
+    ["GW", "245", "Guinee-Bissau"], ["GY", "592", "Guyana"], ["HT", "509", "Haïti"],
+    ["HN", "504", "Honduras"], ["HK", "852", "Hongkong"], ["HU", "36", "Hongarije"],
+    ["IS", "354", "IJsland"], ["IN", "91", "India"], ["ID", "62", "Indonesië"],
+    ["IR", "98", "Iran"], ["IQ", "964", "Irak"], ["IE", "353", "Ierland"],
+    ["IL", "972", "Israël"], ["IT", "39", "Italië"], ["JM", "1876", "Jamaica"],
+    ["JP", "81", "Japan"], ["JO", "962", "Jordanië"], ["KZ", "7", "Kazachstan"],
+    ["KE", "254", "Kenia"], ["KI", "686", "Kiribati"], ["XK", "383", "Kosovo"],
+    ["KW", "965", "Koeweit"], ["KG", "996", "Kirgizië"], ["LA", "856", "Laos"],
+    ["LV", "371", "Letland"], ["LB", "961", "Libanon"], ["LS", "266", "Lesotho"],
+    ["LR", "231", "Liberia"], ["LY", "218", "Libië"], ["LI", "423", "Liechtenstein"],
+    ["LT", "370", "Litouwen"], ["LU", "352", "Luxemburg"], ["MO", "853", "Macau"],
+    ["MG", "261", "Madagaskar"], ["MW", "265", "Malawi"], ["MY", "60", "Maleisië"],
+    ["MV", "960", "Maldiven"], ["ML", "223", "Mali"], ["MT", "356", "Malta"],
+    ["MH", "692", "Marshalleilanden"], ["MQ", "596", "Martinique"], ["MR", "222", "Mauritanië"],
+    ["MU", "230", "Mauritius"], ["YT", "262", "Mayotte"], ["MX", "52", "Mexico"],
+    ["FM", "691", "Micronesië"], ["MD", "373", "Moldavië"], ["MC", "377", "Monaco"],
+    ["MN", "976", "Mongolië"], ["ME", "382", "Montenegro"], ["MS", "1664", "Montserrat"],
+    ["MA", "212", "Marokko"], ["MZ", "258", "Mozambique"], ["MM", "95", "Myanmar"],
+    ["NA", "264", "Namibië"], ["NR", "674", "Nauru"], ["NP", "977", "Nepal"],
+    ["NC", "687", "Nieuw-Caledonië"], ["NZ", "64", "Nieuw-Zeeland"], ["NI", "505", "Nicaragua"],
+    ["NE", "227", "Niger"], ["NG", "234", "Nigeria"], ["NU", "683", "Niue"],
+    ["KP", "850", "Noord-Korea"], ["MK", "389", "Noord-Macedonië"], ["NO", "47", "Noorwegen"],
+    ["OM", "968", "Oman"], ["PK", "92", "Pakistan"], ["PW", "680", "Palau"],
+    ["PS", "970", "Palestina"], ["PA", "507", "Panama"], ["PG", "675", "Papoea-Nieuw-Guinea"],
+    ["PY", "595", "Paraguay"], ["PE", "51", "Peru"], ["PH", "63", "Filipijnen"],
+    ["PL", "48", "Polen"], ["PT", "351", "Portugal"], ["PR", "1787", "Puerto Rico"],
+    ["QA", "974", "Qatar"], ["RE", "262", "Réunion"], ["RO", "40", "Roemenië"],
+    ["RU", "7", "Rusland"], ["RW", "250", "Rwanda"], ["WS", "685", "Samoa"],
+    ["SM", "378", "San Marino"], ["ST", "239", "Sao Tomé en Principe"], ["SA", "966", "Saoedi-Arabië"],
+    ["SN", "221", "Senegal"], ["RS", "381", "Servië"], ["SC", "248", "Seychellen"],
+    ["SL", "232", "Sierra Leone"], ["SG", "65", "Singapore"], ["SX", "1721", "Sint-Maarten"],
+    ["SK", "421", "Slowakije"], ["SI", "386", "Slovenië"], ["SB", "677", "Salomonseilanden"],
+    ["SO", "252", "Somalië"], ["ZA", "27", "Zuid-Afrika"], ["KR", "82", "Zuid-Korea"],
+    ["SS", "211", "Zuid-Soedan"], ["ES", "34", "Spanje"], ["LK", "94", "Sri Lanka"],
+    ["SD", "249", "Soedan"], ["SR", "597", "Suriname"], ["SE", "46", "Zweden"],
+    ["CH", "41", "Zwitserland"], ["SY", "963", "Syrië"], ["TW", "886", "Taiwan"],
+    ["TJ", "992", "Tadzjikistan"], ["TZ", "255", "Tanzania"], ["TH", "66", "Thailand"],
+    ["TL", "670", "Oost-Timor"], ["TG", "228", "Togo"], ["TO", "676", "Tonga"],
+    ["TT", "1868", "Trinidad en Tobago"], ["TN", "216", "Tunesië"], ["TR", "90", "Turkije"],
+    ["TM", "993", "Turkmenistan"], ["TC", "1649", "Turks- en Caicoseilanden"], ["TV", "688", "Tuvalu"],
+    ["UG", "256", "Oeganda"], ["UA", "380", "Oekraïne"], ["AE", "971", "Verenigde Arabische Emiraten"],
+    ["GB", "44", "Verenigd Koninkrijk"], ["US", "1", "Verenigde Staten"], ["UY", "598", "Uruguay"],
+    ["UZ", "998", "Oezbekistan"], ["VU", "678", "Vanuatu"], ["VA", "379", "Vaticaanstad"],
+    ["VE", "58", "Venezuela"], ["VN", "84", "Vietnam"], ["YE", "967", "Jemen"],
+    ["ZM", "260", "Zambia"], ["ZW", "263", "Zimbabwe"],
+  ];
+
+  const COUNTRY_BY_ISO = Object.fromEntries(COUNTRY_CODES.map((c) => [c[0], c]));
+
+  /** Local-format input + a country's dial code -> E.164 (e.g. "0612345678" + NL -> "+31612345678"). */
+  function toE164(localNumber, iso2) {
+    const country = COUNTRY_BY_ISO[iso2] || COUNTRY_BY_ISO.NL;
+    const digits = (localNumber || "").replace(/[^\d+]/g, "");
+    if (!digits) return "";
+    if (digits.startsWith("+")) return digits;
+    if (digits.startsWith("00")) return `+${digits.slice(2)}`;
+    const trimmed = digits.startsWith("0") ? digits.slice(1) : digits;
+    return `+${country[1]}${trimmed}`;
+  }
+
+  /** Reverse of toE164, for pre-filling the edit form: E.164 -> { iso2, local }. */
+  function fromE164(e164) {
+    if (!e164) return { iso2: "NL", local: "" };
+    const digits = e164.replace(/[^\d+]/g, "");
+    if (!digits.startsWith("+")) return { iso2: "NL", local: digits };
+    const withoutPlus = digits.slice(1);
+    // Longest dial-code match first, so e.g. "1809" (DO) isn't shadowed by "1" (US/CA).
+    const match = [...COUNTRY_CODES]
+      .sort((a, b) => b[1].length - a[1].length)
+      .find((c) => withoutPlus.startsWith(c[1]));
+    if (!match) return { iso2: "NL", local: withoutPlus };
+    return { iso2: match[0], local: `0${withoutPlus.slice(match[1].length)}` };
+  }
+
   function css(strings, ...values) {
     return strings.reduce((acc, s, i) => acc + s + (values[i] ?? ""), "");
   }
@@ -55,6 +169,7 @@
         age: st.attributes.age_at_next_birthday,
         eventType: st.attributes.event_type || "birthday",
         dateOfDeath: st.attributes.date_of_death,
+        phoneNumber: st.attributes.phone_number,
       }))
       .filter((e) => !allowed || allowed.includes(e.eventType));
   }
@@ -413,6 +528,21 @@
             <input id="f-date-death" type="date" value="${editing && editing.dateOfDeath ? editing.dateOfDeath : ""}" />
             <label>Icoon (optioneel, bv. mdi:cake)</label>
             <input id="f-icon" value="${editing && editing.icon ? editing.icon : ""}" />
+            <label>Telefoonnummer (optioneel, alleen zinvol bij 'Verjaardag'/'Jubileum')</label>
+            <div style="display:flex; gap:8px;">
+              ${(() => {
+                const phone = fromE164(editing ? editing.phoneNumber : "");
+                return css`
+                  <select id="f-phone-country" style="flex:0 0 auto; width:auto;">
+                    ${COUNTRY_CODES.map(
+                      (c) =>
+                        `<option value="${c[0]}" ${c[0] === phone.iso2 ? "selected" : ""}>${c[2]} (+${c[1]})</option>`
+                    ).join("")}
+                  </select>
+                  <input id="f-phone-local" style="flex:1;" placeholder="0612345678" value="${phone.local}" />
+                `;
+              })()}
+            </div>
             <div class="bd-actions">
               <button class="bd-btn" data-action="save">${editing ? "Opslaan" : "Toevoegen"}</button>
               <button class="bd-btn secondary" data-action="cancel">Annuleren</button>
@@ -519,6 +649,8 @@
       const dateVal = root.querySelector("#f-date").value;
       const dateOfDeath = root.querySelector("#f-date-death").value;
       const icon = root.querySelector("#f-icon").value.trim();
+      const phoneCountry = root.querySelector("#f-phone-country").value;
+      const phoneLocal = root.querySelector("#f-phone-local").value.trim();
 
       if (!name || !dateVal) {
         this._status = "Naam en datum zijn verplicht.";
@@ -529,6 +661,9 @@
       const data = { name, event_type: eventType, date: dateVal };
       if (icon) data.icon = icon;
       if (eventType === "deceased" && dateOfDeath) data.date_of_death = dateOfDeath;
+      // Only meaningful for birthday/anniversary; clears any previously set
+      // number if the type was switched to deceased or the field was emptied.
+      data.phone_number = PHONE_EVENT_TYPES.includes(eventType) && phoneLocal ? toE164(phoneLocal, phoneCountry) : "";
 
       if (this._editingId) {
         await callService(this._hass, "update_event", { event_id: this._editingId, ...data });

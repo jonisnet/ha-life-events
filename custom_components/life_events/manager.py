@@ -120,6 +120,7 @@ class LifeEventsManager:
             "event_id": event_id,
             "date_of_death": fields.get("date_of_death", current.date_of_death),
             "icon": fields.get("icon", current.icon),
+            "phone_number": fields.get("phone_number", current.phone_number),
             "attributes": fields.get("attributes", current.attributes),
         }
         updated = Event.create(**merged)

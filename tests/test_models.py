@@ -69,3 +69,21 @@ def test_csv_export_import_roundtrip_keeps_attributes():
     assert len(parsed) == 1
     assert parsed[0].attributes["connectie"] == "Familie Mijling"
     assert parsed[0].id == new_event_id("Kyara Deitelzweig Senior", "verjaardag Kyara")
+
+
+def test_phone_number_roundtrips_through_storage():
+    event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22), phone_number="+31612345678")
+    restored = Event.from_storage_dict(event.to_storage_dict())
+    assert restored.phone_number == "+31612345678"
+
+
+def test_phone_number_defaults_to_none():
+    event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22))
+    assert event.phone_number is None
+
+
+def test_csv_export_import_roundtrip_keeps_phone_number():
+    events = [Event.create(name="Bilbo Baggins", date_=date(1843, 9, 22), phone_number="+31612345678")]
+    content = export_events(events, "csv")
+    parsed = parse_events(content, "csv")
+    assert parsed[0].phone_number == "+31612345678"

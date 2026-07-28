@@ -3,7 +3,20 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 1.0.0-beta.1 — unreleased
+## 1.0.0-beta.2 — unreleased
+
+### Added
+- `phone_number` event field (E.164 format), only meaningful for
+  `birthday`/`anniversary` events. The **Life Events: Manage** card exposes
+  it as a country dropdown (full ITU dial-code list, defaulting to NL `+31`)
+  plus a local-number input, normalized to E.164 client-side (e.g. NL
+  `0612345678` → `+31612345678`) before calling the service. Exposed as a
+  `phone_number` entity attribute when set, and round-trips through
+  CSV/JSON import/export.
+- Foundational work for an upcoming automation blueprint that will use this
+  field to notify a phone number.
+
+## 1.0.0-beta.1
 
 Renamed from `ha-birthdays` (domain `birthdays`) to `ha-life-events` (domain
 `life_events`), on top of that project's full rearchitecture from a

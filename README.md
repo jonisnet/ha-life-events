@@ -75,6 +75,7 @@ dashboards written against the original integration keep working unmodified.
 | `event_type` | no, default `birthday` | `birthday`, `anniversary` or `deceased` |
 | `date_of_death` | no | Only meaningful for `deceased` |
 | `icon` | no | Defaults per event type (`mdi:cake`, `mdi:ring`, `mdi:flower`) |
+| `phone_number` | no | E.164 format (e.g. `+31612345678`). Only meaningful for `birthday`/`anniversary`. The **Life Events: Manage** card lets you pick a country from the full dial-code list and type the local number (e.g. NL `0612345678`) — it's normalized to E.164 for you. |
 | `attributes` | no | Freeform key/value pairs, exposed as extra entity attributes |
 
 ## Services
@@ -144,8 +145,6 @@ automation:
 
 Planned for an upcoming beta, not yet in v1.0.0-beta.1:
 
-- An official automation blueprint matching a real notification setup, sent
-  to configurable phone numbers.
-- A phone number field with a selectable country code (e.g. NL `+31`,
-  entering `0612345678` normalizes to `+31612345678`).
+- An official automation blueprint matching a real notification setup, using
+  the phone number field above.
 - A bundled example dashboard.

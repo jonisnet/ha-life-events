@@ -35,6 +35,12 @@ add_event:
       example: "mdi:cake"
       selector:
         icon:
+    phone_number:
+      required: false
+      description: "E.164 format, e.g. +31612345678. Only meaningful for birthday/anniversary events."
+      example: "+31612345678"
+      selector:
+        text:
     attributes:
       required: false
       description: Freeform extra attributes (key/value pairs).
@@ -73,6 +79,11 @@ update_event:
       required: false
       selector:
         icon:
+    phone_number:
+      required: false
+      description: "E.164 format, e.g. +31612345678. Only meaningful for birthday/anniversary events."
+      selector:
+        text:
     attributes:
       required: false
       selector:

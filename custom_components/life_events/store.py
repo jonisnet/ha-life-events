@@ -85,6 +85,7 @@ def parse_events(content: str, fmt: str) -> list[Event]:
                         "date": row["date"],
                         "date_of_death": row.get("date_of_death") or None,
                         "icon": row.get("icon") or None,
+                        "phone_number": row.get("phone_number") or None,
                         "attributes": attributes,
                     }
                 )
