@@ -19,7 +19,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v1.0.0-beta.5 loaded");
+  console.info("Life Events cards: v1.0.0-beta.6 loaded");
 
   const DOMAIN = "life_events";
 
@@ -377,6 +377,11 @@
   class LifeEventsUpcomingCardEditor extends HTMLElement {
     setConfig(config) {
       this._config = config || {};
+      // HA's editor dialog echoes our own config-changed events straight
+      // back into a fresh setConfig() call. Rebuilding the DOM on that
+      // echo (same bug as the hass-render issue elsewhere) would wipe
+      // whatever the user is mid-typing on every keystroke.
+      if (this._suppressSetConfig) return;
       this._render();
     }
     set hass(hass) {
@@ -401,7 +406,9 @@
     }
     _update(patch) {
       this._config = { ...this._config, ...patch };
+      this._suppressSetConfig = true;
       fireEvent(this, "config-changed", { config: this._config });
+      Promise.resolve().then(() => { this._suppressSetConfig = false; });
     }
   }
 
@@ -472,6 +479,7 @@
   class LifeEventsMonthCardEditor extends HTMLElement {
     setConfig(config) {
       this._config = config || {};
+      if (this._suppressSetConfig) return;
       this._render();
     }
     set hass(hass) {
@@ -492,7 +500,9 @@
     }
     _update(patch) {
       this._config = { ...this._config, ...patch };
+      this._suppressSetConfig = true;
       fireEvent(this, "config-changed", { config: this._config });
+      Promise.resolve().then(() => { this._suppressSetConfig = false; });
     }
   }
 
@@ -784,6 +794,7 @@
   class LifeEventsManageCardEditor extends HTMLElement {
     setConfig(config) {
       this._config = config || {};
+      if (this._suppressSetConfig) return;
       this._render();
     }
     set hass(hass) {
@@ -802,7 +813,9 @@
     }
     _update(patch) {
       this._config = { ...this._config, ...patch };
+      this._suppressSetConfig = true;
       fireEvent(this, "config-changed", { config: this._config });
+      Promise.resolve().then(() => { this._suppressSetConfig = false; });
     }
   }
 

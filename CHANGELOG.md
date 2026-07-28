@@ -3,7 +3,25 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 1.0.0-beta.5 — unreleased
+## 1.0.0-beta.6 — unreleased
+
+### Fixed
+- The real remaining cause of "can't type in the card" reports after
+  beta.3/beta.4: that fix only covered the Manage card's own add/edit-event
+  form. The three card **config editors** (shown when adding/configuring a
+  card from the dashboard UI - `LifeEventsUpcomingCardEditor`,
+  `LifeEventsMonthCardEditor`, `LifeEventsManageCardEditor`) had the
+  identical bug in `setConfig()`: HA's editor dialog echoes every
+  `config-changed` event straight back into a fresh `setConfig()` call,
+  which rebuilt the whole form on every keystroke, immediately losing
+  focus/selection. Fixed with the same kind of guard, keyed off a flag set
+  while we're the one causing the echo (cleared on the next microtask) so
+  genuinely external `setConfig()` calls still re-render normally.
+  Confirmed unrelated to caching: calling the services directly via
+  Developer Tools worked throughout, since that never touches this code
+  path.
+
+## 1.0.0-beta.5
 
 ### Added
 - A logo: a birthday cake with candles growing from small to large (left to
