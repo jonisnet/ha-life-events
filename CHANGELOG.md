@@ -3,7 +3,21 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 1.0.0-beta.4 — unreleased
+## 1.0.0-beta.5 — unreleased
+
+### Added
+- A logo: a birthday cake with candles growing from small to large (left to
+  right), calendar-style "binder rings" above the cake and a row of small
+  dots along the base evoking day markers. An original design in HA's brand
+  blue (`#18BCF2`) - not HA's own logo mark, which custom integrations are
+  explicitly not allowed to use per the
+  [brands repo policy](https://github.com/home-assistant/brands#readme).
+  Source SVG in `branding/logo.svg`; rasterized to
+  `custom_components/life_events/icon.png` (256x256) and `icon@2x.png`
+  (512x512), picked up automatically by HA 2026.3.0+'s local custom-
+  integration brand icon support (no `home-assistant/brands` PR needed).
+
+## 1.0.0-beta.4
 
 ### Fixed
 - The bundled card JS was served from a fixed URL (`/life_events_static/

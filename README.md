@@ -1,3 +1,5 @@
+<p align="center"><img src="custom_components/life_events/icon.png" width="96" height="96" alt="Life Events logo: a birthday cake with candles growing from small to large, left to right"></p>
+
 # Life Events
 
 > **⚠️ Beta.** This project is a rename/continuation of [ha-birthdays](https://github.com/jonisnet/ha-birthdays)
@@ -31,6 +33,11 @@ better. The domain also changed, from `birthdays` to `life_events` — see
 1. Copy `custom_components/life_events` into your HA config's `custom_components` directory.
 2. Restart Home Assistant.
 3. Go to **Settings → Devices & services → Add integration** and search for **Life Events**.
+
+The icon shown above is bundled directly in the integration folder
+(`custom_components/life_events/icon.png`) and picked up automatically by
+Home Assistant **2026.3.0 and later**. On older versions you'll just see a
+generic icon in the integrations list — everything else still works.
 
 ## Migrating
 
