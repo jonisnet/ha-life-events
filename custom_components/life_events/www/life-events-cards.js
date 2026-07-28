@@ -19,7 +19,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v1.0.0-beta.7 loaded");
+  console.info("Life Events cards: v1.0.0-beta.8 loaded");
 
   const DOMAIN = "life_events";
 
@@ -232,12 +232,12 @@
       .le-editor { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
       .le-editor-field { display: flex; flex-direction: column; gap: 4px; }
       .le-editor-field label { font-size: 12px; color: var(--secondary-text-color); }
-      .le-editor-field input {
+      .le-editor-field input, .le-editor-field select {
         font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 6px;
         border: 1px solid var(--divider-color); background: var(--card-background-color);
         color: var(--primary-text-color); width: 100%; box-sizing: border-box;
       }
-      .le-editor-field input:focus { outline: none; border-color: var(--primary-color); }
+      .le-editor-field input:focus, .le-editor-field select:focus { outline: none; border-color: var(--primary-color); }
       .le-editor-label { font-size: 12px; color: var(--secondary-text-color); margin-bottom: -8px; }
       .le-editor-types { display: flex; flex-wrap: wrap; gap: 4px 16px; }
     </style>
@@ -248,6 +248,19 @@
       <div class="le-editor-field">
         <label for="${id}">${label}</label>
         <input id="${id}" value="${value}" ${extraAttrs || ""} />
+      </div>
+    `;
+  }
+
+  function renderEditorSelect(id, label, options, selectedValue) {
+    return css`
+      <div class="le-editor-field">
+        <label for="${id}">${label}</label>
+        <select id="${id}">
+          ${options
+            .map(([value, text]) => `<option value="${value}" ${value === selectedValue ? "selected" : ""}>${text}</option>`)
+            .join("")}
+        </select>
       </div>
     `;
   }
@@ -339,6 +352,11 @@
             .bd-filters { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
             .bd-filters input, .bd-filters select { padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
             .bd-filters input { flex: 1; min-width: 120px; }
+            .bd-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px; box-sizing: border-box; }
+            .bd-modal { background: var(--card-background-color); border-radius: 12px; max-width: 480px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+            .bd-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--divider-color); flex-shrink: 0; }
+            .bd-modal-title { font-weight: 600; }
+            .bd-modal-body { padding: 16px; overflow-y: auto; }
             button.bd-btn { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; background: var(--primary-color); color: var(--text-primary-color, #fff); font: inherit; }
             button.bd-btn.secondary { background: var(--secondary-background-color); color: var(--primary-text-color); }
             button.bd-btn.danger { background: var(--error-color, #db4437); color: #fff; }
@@ -531,7 +549,7 @@
   // ---------------------------------------------------------------------
   class LifeEventsManageCard extends LifeEventsBaseCard {
     static getStubConfig() {
-      return { title: "Verjaardagen beheren", event_types: [] };
+      return { title: "Verjaardagen beheren", event_types: [], display_mode: "full" };
     }
 
     constructor() {
@@ -539,9 +557,25 @@
       this._editingId = null;
       this._formOpen = false;
       this._importOpen = false;
+      this._panelOpen = false;
+      this._autoOpenTried = false;
       this._status = "";
       this._searchQuery = "";
       this._monthFilter = "";
+    }
+
+    _modalWrap(title, bodyHtml, closeAction) {
+      return css`
+        <div class="bd-modal-backdrop">
+          <div class="bd-modal">
+            <div class="bd-modal-header">
+              <span class="bd-modal-title">${title}</span>
+              <button class="bd-icon-btn" data-action="${closeAction}">✕</button>
+            </div>
+            <div class="bd-modal-body">${bodyHtml}</div>
+          </div>
+        </div>
+      `;
     }
 
     // Base list for this card (config's event_types filter only). Used for
@@ -610,87 +644,97 @@
 
     _render() {
       if (!this._hass) return;
-      // Kept in sync here (rather than at every _formOpen/_importOpen
-      // toggle site) so a later hass update skips re-rendering while the
-      // add/edit form or import textarea is open - otherwise every hass
-      // tick (any entity changing state, anywhere in HA) would wipe out
-      // whatever the user is currently typing.
-      this._suppressRender = this._formOpen || this._importOpen;
+      const isButtonMode = this._config.display_mode === "button";
+
+      // Auto-open the add-form once, the first time we have real data and
+      // there are truly zero events yet - the most useful thing to show on
+      // a fresh install. Guarded so cancelling it doesn't force it back
+      // open on the next render.
+      if (!this._autoOpenTried) {
+        this._autoOpenTried = true;
+        if (this._baseEvents().length === 0) {
+          this._editingId = null;
+          this._formOpen = true;
+          if (isButtonMode) this._panelOpen = true;
+        }
+      }
+
+      // Kept in sync here (rather than at every toggle site) so a later
+      // hass update skips re-rendering while any popup is open - otherwise
+      // every hass tick (any entity changing state, anywhere in HA) would
+      // wipe out whatever the user is currently typing.
+      this._suppressRender = this._formOpen || this._importOpen || (isButtonMode && this._panelOpen);
 
       const editing = this._editingId ? this._baseEvents().find((e) => e.entity_id === `${DOMAIN}.${this._editingId}`) : null;
 
-      const form = this._formOpen
-        ? css`
-          <div class="bd-form">
-            <label>Naam</label>
-            <input id="f-name" value="${editing ? editing.name : ""}" />
-            <label>Type</label>
-            <select id="f-type">
-              ${["birthday", "anniversary", "deceased"]
-                .map(
-                  (t) =>
-                    `<option value="${t}" ${editing && editing.eventType === t ? "selected" : ""}>${EVENT_TYPE_LABELS[t]}</option>`
-                )
-                .join("")}
-            </select>
-            <label>Datum</label>
-            <input id="f-date" type="date" value="${editing ? editing.date : ""}" />
-            <label>Datum van overlijden (alleen bij type 'Overleden')</label>
-            <input id="f-date-death" type="date" value="${editing && editing.dateOfDeath ? editing.dateOfDeath : ""}" />
-            <label>Icoon (optioneel, bv. mdi:cake)</label>
-            <input id="f-icon" value="${editing && editing.icon ? editing.icon : ""}" />
-            <label>Telefoonnummer (optioneel, alleen zinvol bij 'Verjaardag'/'Jubileum')</label>
-            <div style="display:flex; gap:8px;">
-              ${(() => {
-                const phone = fromE164(editing ? editing.phoneNumber : "");
-                return css`
-                  <select id="f-phone-country" style="flex:0 0 auto; width:auto;">
-                    ${COUNTRY_CODES.map(
-                      (c) =>
-                        `<option value="${c[0]}" ${c[0] === phone.iso2 ? "selected" : ""}>${c[2]} (+${c[1]})</option>`
-                    ).join("")}
-                  </select>
-                  <input id="f-phone-local" style="flex:1;" placeholder="0612345678" value="${phone.local}" />
-                `;
-              })()}
-            </div>
-            <div class="bd-actions">
-              <button class="bd-btn" data-action="save">${editing ? "Opslaan" : "Toevoegen"}</button>
-              <button class="bd-btn secondary" data-action="cancel">Annuleren</button>
-            </div>
+      const formBody = css`
+        <div class="bd-form">
+          <label>Naam</label>
+          <input id="f-name" value="${editing ? editing.name : ""}" />
+          <label>Type</label>
+          <select id="f-type">
+            ${["birthday", "anniversary", "deceased"]
+              .map(
+                (t) =>
+                  `<option value="${t}" ${editing && editing.eventType === t ? "selected" : ""}>${EVENT_TYPE_LABELS[t]}</option>`
+              )
+              .join("")}
+          </select>
+          <label>Datum</label>
+          <input id="f-date" type="date" value="${editing ? editing.date : ""}" />
+          <label>Datum van overlijden (alleen bij type 'Overleden')</label>
+          <input id="f-date-death" type="date" value="${editing && editing.dateOfDeath ? editing.dateOfDeath : ""}" />
+          <label>Icoon (optioneel, bv. mdi:cake)</label>
+          <input id="f-icon" value="${editing && editing.icon ? editing.icon : ""}" />
+          <label>Telefoonnummer (optioneel, alleen zinvol bij 'Verjaardag'/'Jubileum')</label>
+          <div style="display:flex; gap:8px;">
+            ${(() => {
+              const phone = fromE164(editing ? editing.phoneNumber : "");
+              return css`
+                <select id="f-phone-country" style="flex:0 0 auto; width:auto;">
+                  ${COUNTRY_CODES.map(
+                    (c) =>
+                      `<option value="${c[0]}" ${c[0] === phone.iso2 ? "selected" : ""}>${c[2]} (+${c[1]})</option>`
+                  ).join("")}
+                </select>
+                <input id="f-phone-local" style="flex:1;" placeholder="0612345678" value="${phone.local}" />
+              `;
+            })()}
           </div>
-        `
-        : "";
-
-      const importExport = this._importOpen
-        ? css`
-          <div class="bd-form">
-            <label>Formaat</label>
-            <select id="io-format">
-              <option value="json">JSON</option>
-              <option value="csv">CSV</option>
-            </select>
-            <label>Modus bij importeren</label>
-            <select id="io-mode">
-              <option value="merge">Samenvoegen</option>
-              <option value="replace">Vervangen</option>
-            </select>
-            <label>Bestand kiezen (optioneel, vult de inhoud hieronder)</label>
-            <input id="io-file" type="file" accept=".json,.csv,application/json,text/csv" />
-            <div id="io-file-status" class="bd-secondary"></div>
-            <label>Inhoud (plak hier, kies een bestand hierboven, of gebruik Exporteren om te vullen)</label>
-            <textarea id="io-content" rows="6"></textarea>
-            <div class="bd-actions">
-              <button class="bd-btn" data-action="export">Exporteren</button>
-              <button class="bd-btn" data-action="download">Download bestand</button>
-              <button class="bd-btn secondary" data-action="import">Importeren</button>
-              <button class="bd-btn secondary" data-action="close-io">Sluiten</button>
-            </div>
+          <div class="bd-actions">
+            <button class="bd-btn" data-action="save">${editing ? "Opslaan" : "Toevoegen"}</button>
+            <button class="bd-btn secondary" data-action="cancel">Annuleren</button>
           </div>
-        `
-        : "";
+        </div>
+      `;
 
-      this._shell(css`
+      const importExportBody = css`
+        <div class="bd-form">
+          <label>Formaat</label>
+          <select id="io-format">
+            <option value="json">JSON</option>
+            <option value="csv">CSV</option>
+          </select>
+          <label>Modus bij importeren</label>
+          <select id="io-mode">
+            <option value="merge">Samenvoegen</option>
+            <option value="replace">Vervangen</option>
+          </select>
+          <label>Bestand kiezen (optioneel, vult de inhoud hieronder)</label>
+          <input id="io-file" type="file" accept=".json,.csv,application/json,text/csv" />
+          <div id="io-file-status" class="bd-secondary"></div>
+          <label>Inhoud (plak hier, kies een bestand hierboven, of gebruik Exporteren om te vullen)</label>
+          <textarea id="io-content" rows="6"></textarea>
+          <div class="bd-actions">
+            <button class="bd-btn" data-action="export">Exporteren</button>
+            <button class="bd-btn" data-action="download">Download bestand</button>
+            <button class="bd-btn secondary" data-action="import">Importeren</button>
+            <button class="bd-btn secondary" data-action="close-io">Sluiten</button>
+          </div>
+        </div>
+      `;
+
+      const panelBody = css`
         <div class="bd-filters">
           <input id="f-search" placeholder="Zoek op naam..." value="${this._searchQuery}" />
           <select id="f-month-filter">
@@ -705,13 +749,25 @@
           ${!this._importOpen ? `<button class="bd-btn secondary" data-action="io">Import / export</button>` : ""}
         </div>
         <div id="le-list">${this._rowsHtml()}</div>
-        ${form}
-        ${importExport}
         ${this._status ? `<div class="bd-secondary" style="margin-top:8px;">${this._status}</div>` : ""}
+      `;
+
+      const mainHtml = isButtonMode
+        ? this._panelOpen
+          ? ""
+          : css`<button class="bd-btn" data-action="open-panel">Beheer openen</button>`
+        : panelBody;
+
+      this._shell(css`
+        ${mainHtml}
+        ${isButtonMode && this._panelOpen ? this._modalWrap(this._config.title || "Beheren", panelBody, "close-panel") : ""}
+        ${this._formOpen ? this._modalWrap(editing ? "Bewerken" : "Toevoegen", formBody, "cancel") : ""}
+        ${this._importOpen ? this._modalWrap("Import / export", importExportBody, "close-io") : ""}
       `);
 
       this._bindEvents();
       this._bindFilterEvents();
+      this._bindModalBackdrops();
     }
 
     _bindEvents() {
@@ -724,13 +780,16 @@
           this._formOpen = true;
           this._render();
         });
-      const cancelBtn = root.querySelector('[data-action="cancel"]');
-      if (cancelBtn)
-        cancelBtn.addEventListener("click", () => {
+      // querySelectorAll: the modal header's close (X) button reuses the
+      // same data-action as the body's own Annuleren/Sluiten button, so
+      // there are two matching elements to bind whenever a modal is open.
+      root.querySelectorAll('[data-action="cancel"]').forEach((btn) =>
+        btn.addEventListener("click", () => {
           this._formOpen = false;
           this._editingId = null;
           this._render();
-        });
+        })
+      );
       const saveBtn = root.querySelector('[data-action="save"]');
       if (saveBtn) saveBtn.addEventListener("click", () => this._save());
 
@@ -740,12 +799,12 @@
           this._importOpen = true;
           this._render();
         });
-      const closeIoBtn = root.querySelector('[data-action="close-io"]');
-      if (closeIoBtn)
-        closeIoBtn.addEventListener("click", () => {
+      root.querySelectorAll('[data-action="close-io"]').forEach((btn) =>
+        btn.addEventListener("click", () => {
           this._importOpen = false;
           this._render();
-        });
+        })
+      );
       const exportBtn = root.querySelector('[data-action="export"]');
       if (exportBtn) exportBtn.addEventListener("click", () => this._export(false));
       const downloadBtn = root.querySelector('[data-action="download"]');
@@ -754,6 +813,18 @@
       if (importBtn) importBtn.addEventListener("click", () => this._import());
       const fileInput = root.querySelector("#io-file");
       if (fileInput) fileInput.addEventListener("change", () => this._loadFile());
+      const openPanelBtn = root.querySelector('[data-action="open-panel"]');
+      if (openPanelBtn)
+        openPanelBtn.addEventListener("click", () => {
+          this._panelOpen = true;
+          this._render();
+        });
+      const closePanelBtn = root.querySelector('[data-action="close-panel"]');
+      if (closePanelBtn)
+        closePanelBtn.addEventListener("click", () => {
+          this._panelOpen = false;
+          this._render();
+        });
     }
 
     _bindFilterEvents() {
@@ -770,6 +841,19 @@
           this._monthFilter = e.target.value;
           this._renderList();
         });
+    }
+
+    // Clicking outside the modal box closes it, by delegating to the
+    // already-bound header close button - avoids duplicating each modal's
+    // close logic here.
+    _bindModalBackdrops() {
+      this.shadowRoot.querySelectorAll(".bd-modal-backdrop").forEach((backdrop) => {
+        backdrop.addEventListener("click", (e) => {
+          if (e.target !== backdrop) return;
+          const closeBtn = backdrop.querySelector(".bd-modal-header [data-action]");
+          if (closeBtn) closeBtn.click();
+        });
+      });
     }
 
     _loadFile() {
@@ -882,10 +966,20 @@
         ${EDITOR_STYLE}
         <div class="le-editor">
           ${renderEditorField("title", "Titel", this._config.title ?? "")}
+          ${renderEditorSelect(
+            "display_mode",
+            "Weergave",
+            [
+              ["full", "Volledige kaart"],
+              ["button", "Knop die als popup opent"],
+            ],
+            this._config.display_mode || "full"
+          )}
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
+      this.querySelector("#display_mode").addEventListener("change", (e) => this._update({ display_mode: e.target.value }));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
     _update(patch) {

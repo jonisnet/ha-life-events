@@ -117,8 +117,13 @@ Application → Storage → Clear site data.
   the next N days.
 - **Life Events: Month overview** (`life-events-month-card`) — month picker +
   table, the same layout as the original hand-built dashboard.
-- **Life Events: Manage** (`life-events-manage-card`) — add/edit/delete events,
-  plus import/export.
+- **Life Events: Manage** (`life-events-manage-card`) — search/filter, add,
+  edit, delete, import/export events. Adding/editing opens as a popup.
+  Has a `display_mode` option (set in the card's visual editor, under
+  **Weergave**): `full` (default) keeps the list/search always visible, or
+  `button` shows just a button that opens the whole panel as a popup.
+  On a fresh install with no events yet, the add-event popup opens
+  automatically.
 
 Add them via the dashboard UI card picker (search "Life Events"), or in YAML:
 

@@ -3,7 +3,27 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 1.0.0-beta.7 — unreleased
+## 1.0.0-beta.8 — unreleased
+
+### Added
+- The add/edit-person form and the import/export panel now open as a
+  **popup** (a self-built modal overlay, not HA's `ha-dialog` - given
+  `ha-textfield` doesn't reliably load in this context, betting on
+  another such component seemed unwise) instead of inline in the card,
+  closable via the header's X, an explicit Annuleren/Sluiten button, or
+  clicking outside the popup.
+- New **Weergave** (display mode) option on the Manage card, in its
+  visual editor: **Volledige kaart** (unchanged - list/search/filters
+  always visible) or **Knop die als popup opent** (the card shows just a
+  button; the whole management panel - search, filters, list, add,
+  import/export - opens as a popup on top of the dashboard).
+- On a fresh install with zero events, the add-person popup now opens
+  automatically on first load (in button mode, the management panel
+  opens too) - skips straight to "add your first event" instead of an
+  empty list. Only triggers once; cancelling it doesn't force it back
+  open on the next render.
+
+## 1.0.0-beta.7
 
 ### Added
 - **Life Events: Manage** card: a live search box (filters by name) and a
