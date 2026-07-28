@@ -84,7 +84,7 @@ dashboards written against the original integration keep working unmodified.
 | `date_of_death` | no | Only meaningful for `deceased` |
 | `icon` | no | Defaults per event type (`mdi:cake`, `mdi:ring`, `mdi:flower`) |
 | `phone_number` | no | E.164 format (e.g. `+31612345678`). Only meaningful for `birthday`/`anniversary`. The **Life Events: Manage** card lets you pick a country from the full dial-code list and type the local number (e.g. NL `0612345678`) — it's normalized to E.164 for you. |
-| `attributes` | no | Freeform key/value pairs, exposed as extra entity attributes |
+| `attributes` | no | Freeform key/value pairs you define yourself (e.g. `relatie`, `geslacht`), exposed as extra entity attributes. Editable directly in the **Life Events: Manage** card's add/edit popup — add or remove as many as you like, no fixed schema. |
 
 ## Services
 

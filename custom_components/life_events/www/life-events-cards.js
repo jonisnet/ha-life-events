@@ -19,7 +19,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.2 loaded");
+  console.info("Life Events cards: v0.0.2-beta.3 loaded");
 
   const DOMAIN = "life_events";
 
@@ -158,6 +158,29 @@
     return strings.reduce((acc, s, i) => acc + s + (values[i] ?? ""), "");
   }
 
+  // Fixed attribute names the integration always sets on an event entity
+  // (see entity.py's extra_state_attributes) plus the standard HA ones -
+  // anything else in st.attributes is a user-defined custom attribute
+  // (e.g. "relatie", "geslacht") and round-trips through the add_event/
+  // update_event "attributes" object field.
+  const RESERVED_EVENT_ATTRS = new Set([
+    "friendly_name", "icon", "unit_of_measurement",
+    "date_of_birth", "age_at_next_birthday", "event_type",
+    "date_of_death", "phone_number",
+  ]);
+
+  function customAttributesOf(st) {
+    const out = {};
+    for (const [key, value] of Object.entries(st.attributes)) {
+      if (!RESERVED_EVENT_ATTRS.has(key)) out[key] = value;
+    }
+    return out;
+  }
+
+  function escapeAttr(value) {
+    return String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  }
+
   function getEvents(hass, eventTypes) {
     if (!hass) return [];
     const allowed = eventTypes && eventTypes.length ? eventTypes : null;
@@ -175,6 +198,7 @@
         eventType: st.attributes.event_type || "birthday",
         dateOfDeath: st.attributes.date_of_death,
         phoneNumber: st.attributes.phone_number,
+        attributes: customAttributesOf(st),
       }))
       .filter((e) => !allowed || allowed.includes(e.eventType));
   }
@@ -349,6 +373,8 @@
             .bd-form label { font-size: 12px; color: var(--secondary-text-color); }
             .bd-form input, .bd-form select, .bd-form textarea { padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
             .bd-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+            .bd-attr-row { display: flex; gap: 8px; margin-bottom: 6px; }
+            .bd-attr-row input { flex: 1; min-width: 0; }
             .bd-filters { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
             .bd-filters input, .bd-filters select { padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
             .bd-filters input { flex: 1; min-width: 120px; }
@@ -600,6 +626,34 @@
       `;
     }
 
+    // Renders one input-pair row per custom attribute. Purely DOM-driven
+    // (like the import/export textarea) rather than tracked in card state -
+    // add/remove-row handlers manipulate #f-attrs-rows directly and _save()
+    // reads the final rows straight from the DOM, so nothing here ever
+    // triggers a full _render() that would wipe in-progress typing.
+    _attrRowsHtml(attrs) {
+      const entries = Object.entries(attrs || {});
+      return entries
+        .map(
+          ([k, v]) => css`
+            <div class="bd-attr-row">
+              <input class="f-attr-key" placeholder="Naam (bv. relatie, geslacht)" value="${escapeAttr(k)}" />
+              <input class="f-attr-value" placeholder="Waarde" value="${escapeAttr(v)}" />
+              <button type="button" class="bd-icon-btn" data-action="remove-attr">✕</button>
+            </div>
+          `
+        )
+        .join("");
+    }
+
+    _bindAttrRows() {
+      const container = this.shadowRoot.querySelector("#f-attrs-rows");
+      if (!container) return;
+      container.querySelectorAll('[data-action="remove-attr"]').forEach((btn) =>
+        btn.addEventListener("click", () => btn.closest(".bd-attr-row").remove())
+      );
+    }
+
     // Base list for this card (config's event_types filter only). Used for
     // the editing lookup, independent of the live search/month filter -
     // you're always editing something already visible when you click it.
@@ -623,6 +677,11 @@
                   <div>
                     <div class="bd-name">${e.name}</div>
                     <div class="bd-secondary">${formatDate(e.date)} &middot; <span class="bd-type-badge">${EVENT_TYPE_LABELS[e.eventType] || e.eventType}</span></div>
+                    ${Object.keys(e.attributes).length
+                      ? `<div class="bd-secondary">${Object.entries(e.attributes)
+                          .map(([k, v]) => `${escapeAttr(k)}: ${escapeAttr(v)}`)
+                          .join(" &middot; ")}</div>`
+                      : ""}
                   </div>
                 </div>
                 <div>
@@ -716,6 +775,9 @@
               `;
             })()}
           </div>
+          <label>Aangepaste attributen (optioneel, bv. relatie, geslacht - zelf te bepalen)</label>
+          <div id="f-attrs-rows">${this._attrRowsHtml(editing ? editing.attributes : {})}</div>
+          <button type="button" class="bd-btn secondary" data-action="add-attr">+ Attribuut toevoegen</button>
           <div class="bd-actions">
             <button class="bd-btn" data-action="save">${editing ? "Opslaan" : "Toevoegen"}</button>
             <button class="bd-btn secondary" data-action="cancel">Annuleren</button>
@@ -816,6 +878,21 @@
           this._formOpen = false;
           this._editingId = null;
           this._render();
+        });
+
+      this._bindAttrRows();
+      const addAttrBtn = root.querySelector('[data-action="add-attr"]');
+      if (addAttrBtn)
+        addAttrBtn.addEventListener("click", () => {
+          // Direct DOM append, not _render(): this popup can be mid-edit
+          // (name/date/etc. typed but not saved yet), and a full re-render
+          // would wipe all of that the same way the earlier typing bugs did.
+          const container = root.querySelector("#f-attrs-rows");
+          if (!container) return;
+          container.insertAdjacentHTML("beforeend", this._attrRowsHtml({ "": "" }));
+          const newRow = container.lastElementChild;
+          const removeBtn = newRow.querySelector('[data-action="remove-attr"]');
+          if (removeBtn) removeBtn.addEventListener("click", () => newRow.remove());
         });
 
       const ioBtn = root.querySelector('[data-action="io"]');
@@ -928,6 +1005,16 @@
       // Only meaningful for birthday/anniversary; clears any previously set
       // number if the type was switched to deceased or the field was emptied.
       data.phone_number = PHONE_EVENT_TYPES.includes(eventType) && phoneLocal ? toE164(phoneLocal, phoneCountry) : "";
+      // Always included (even {}), so removing every row actually clears
+      // previously stored attributes - update_event replaces this field
+      // wholesale rather than merging it key by key (see manager.py).
+      const attributes = {};
+      root.querySelectorAll("#f-attrs-rows .bd-attr-row").forEach((row) => {
+        const key = row.querySelector(".f-attr-key").value.trim();
+        const value = row.querySelector(".f-attr-value").value.trim();
+        if (key) attributes[key] = value;
+      });
+      data.attributes = attributes;
 
       if (this._editingId) {
         await callService(this._hass, "update_event", { event_id: this._editingId, ...data });

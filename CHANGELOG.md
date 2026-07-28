@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.2 — unreleased
+## 0.0.2-beta.3 — unreleased
 
 ### Fixed
 - The Manage card's search box and month filter had the same "wipes on
@@ -25,14 +25,26 @@ are cut until noted otherwise.
   the default strict mode those fixtures landed un-awaited
   (`AttributeError: 'async_generator' object has no attribute 'data'`).
   Added `asyncio_mode = auto` under `[tool:pytest]`. That fix then exposed
-  a second, real gap: the bare `hass` test fixture never sets up the `http`
-  component (unlike a real HA instance, which always has it loaded before
-  custom integrations get set up), so `hass.http` was `None` when
-  `_async_register_frontend()` ran, failing `async_setup_entry` entirely.
-  Fixed in the test helper (`await async_setup_component(hass, "http",
-  {})` before setting up the config entry) rather than in the integration,
-  since production code shouldn't guard against a state that can't occur
-  outside a minimal test harness.
+  a second, real gap: the bare `hass` test fixture doesn't set up the
+  `http`/`frontend` components the way a real HA instance always does
+  before custom integrations get set up, so `_async_register_frontend()`
+  (which needs `hass.http` and touches `frontend`'s internal extra-JS-URL
+  registry) failed - and fully setting up `frontend` itself isn't viable in
+  a test environment, since it pulls in the separate `hass_frontend`
+  static-assets package. Since frontend resource registration isn't what
+  these tests are actually about (they check entity/device registry
+  linkage), fixed by mocking out `_async_register_frontend` entirely in the
+  test helper instead of dragging in unrelated, heavy setup.
+
+### Added
+- The Manage card's add/edit popup now has a "Aangepaste attributen" editor:
+  freeform key/value rows you define yourself (e.g. `relatie`, `geslacht`),
+  add/remove per event. This existed in the original ha-birthdays as a
+  generic `attributes` dict, and the backend here (models.py, entity.py,
+  services.py, store.py's CSV/JSON import-export) already carried it
+  through unchanged since the rename - it just had no UI, so it was only
+  reachable via Developer Tools → Services. Saved custom attributes now
+  also show in the Manage card's list rows, not only inside the popup.
 
 ### Changed
 - The 🗑️ delete button no longer sits in the Manage card's list rows -

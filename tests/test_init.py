@@ -9,13 +9,14 @@ the tests/_stubs fallback), so only meaningful in CI/full dev environments.
 """
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.life_events.const import DOMAIN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-from homeassistant.setup import async_setup_component
 
 
 @pytest.fixture(autouse=True)
@@ -28,19 +29,15 @@ async def auto_enable_custom_integrations(enable_custom_integrations):
 
 
 async def _setup_entry(hass: HomeAssistant) -> MockConfigEntry:
-    # The bare `hass` fixture doesn't set up the `http`/`frontend` components,
-    # unlike a real HA instance (where they're always loaded before custom
-    # integrations get set up). Our _async_register_frontend() needs
-    # hass.http to not be None and add_extra_js_url() needs frontend's
-    # hass.data key to already exist, so set both up explicitly here rather
-    # than in the integration itself - production code shouldn't guard
-    # against a state that can't actually occur outside a minimal test
-    # harness.
-    await async_setup_component(hass, "http", {})
-    await async_setup_component(hass, "frontend", {})
     entry = MockConfigEntry(domain=DOMAIN, title="Life Events", data={})
     entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+    # _async_register_frontend() needs the real `http`/`frontend` components
+    # fully set up (the latter pulls in the `hass_frontend` static-assets
+    # package, which isn't part of the test environment) - none of that is
+    # what these tests are about (entity/device registry linkage), so mock
+    # it out rather than dragging in unrelated, heavy setup.
+    with patch("custom_components.life_events._async_register_frontend", return_value=None):
+        assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     return entry
 
