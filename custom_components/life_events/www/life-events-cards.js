@@ -214,6 +214,50 @@
   }
 
   // ---------------------------------------------------------------------
+  // Shared visual editor styling + widgets. Editors render into light DOM
+  // (this.innerHTML, not a shadow root), so this <style> tag is included
+  // directly in that markup. They use HA's own ha-textfield/ha-formfield/
+  // ha-checkbox/ha-switch elements (already globally registered by the HA
+  // frontend) instead of bare <input>/<select>, so they look native
+  // instead of like unstyled browser form controls.
+  // ---------------------------------------------------------------------
+  const EDITOR_STYLE = css`
+    <style>
+      .le-editor { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
+      .le-editor ha-textfield { width: 100%; }
+      .le-editor-label { font-size: 12px; color: var(--secondary-text-color); margin-bottom: -8px; }
+      .le-editor-types { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+    </style>
+  `;
+
+  function renderEventTypeCheckboxes(selectedTypes) {
+    const selected = selectedTypes || [];
+    return css`
+      <div class="le-editor-label">Type filter (leeg = alles)</div>
+      <div class="le-editor-types">
+        ${["birthday", "anniversary", "deceased"]
+          .map(
+            (t) => css`
+              <ha-formfield label="${EVENT_TYPE_LABELS[t]}">
+                <ha-checkbox data-type="${t}" ${selected.includes(t) ? "checked" : ""}></ha-checkbox>
+              </ha-formfield>
+            `
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
+  function bindEventTypeCheckboxes(root, onChange) {
+    const boxes = Array.from(root.querySelectorAll("ha-checkbox[data-type]"));
+    boxes.forEach((cb) =>
+      cb.addEventListener("change", () => {
+        onChange(boxes.filter((c) => c.checked).map((c) => c.dataset.type));
+      })
+    );
+  }
+
+  // ---------------------------------------------------------------------
   // Shared base class: handles the hass setter / re-render plumbing so each
   // card only has to implement render().
   // ---------------------------------------------------------------------
@@ -335,30 +379,20 @@
     }
     _render() {
       this.innerHTML = css`
-        <div class="bd-form" style="padding:16px;">
-          <label>Titel</label>
-          <input id="title" value="${this._config.title ?? ""}" />
-          <label>Aantal dagen vooruit</label>
-          <input id="days_ahead" type="number" min="1" value="${this._config.days_ahead ?? 14}" />
-          <label><input id="show_icon" type="checkbox" ${this._config.show_icon !== false ? "checked" : ""} style="width:auto" /> Toon icoon</label>
-          <label>Type filter (leeg = alles)</label>
-          <select id="event_types" multiple size="3">
-            ${["birthday", "anniversary", "deceased"]
-              .map(
-                (t) =>
-                  `<option value="${t}" ${(this._config.event_types || []).includes(t) ? "selected" : ""}>${EVENT_TYPE_LABELS[t]}</option>`
-              )
-              .join("")}
-          </select>
+        ${EDITOR_STYLE}
+        <div class="le-editor">
+          <ha-textfield id="title" label="Titel" value="${this._config.title ?? ""}"></ha-textfield>
+          <ha-textfield id="days_ahead" label="Aantal dagen vooruit" type="number" min="1" value="${this._config.days_ahead ?? 14}"></ha-textfield>
+          <ha-formfield label="Toon icoon">
+            <ha-switch id="show_icon" ${this._config.show_icon !== false ? "checked" : ""}></ha-switch>
+          </ha-formfield>
+          ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
       this.querySelector("#days_ahead").addEventListener("input", (e) => this._update({ days_ahead: Number(e.target.value) }));
       this.querySelector("#show_icon").addEventListener("change", (e) => this._update({ show_icon: e.target.checked }));
-      this.querySelector("#event_types").addEventListener("change", (e) => {
-        const values = Array.from(e.target.selectedOptions).map((o) => o.value);
-        this._update({ event_types: values });
-      });
+      bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
     _update(patch) {
       this._config = { ...this._config, ...patch };
@@ -440,28 +474,16 @@
     }
     _render() {
       this.innerHTML = css`
-        <div class="bd-form" style="padding:16px;">
-          <label>Titel</label>
-          <input id="title" value="${this._config.title ?? ""}" />
-          <label>Aantal kolommen (maandknoppen)</label>
-          <input id="columns" type="number" min="1" max="6" value="${this._config.columns ?? 3}" />
-          <label>Type filter (leeg = alles)</label>
-          <select id="event_types" multiple size="3">
-            ${["birthday", "anniversary", "deceased"]
-              .map(
-                (t) =>
-                  `<option value="${t}" ${(this._config.event_types || []).includes(t) ? "selected" : ""}>${EVENT_TYPE_LABELS[t]}</option>`
-              )
-              .join("")}
-          </select>
+        ${EDITOR_STYLE}
+        <div class="le-editor">
+          <ha-textfield id="title" label="Titel" value="${this._config.title ?? ""}"></ha-textfield>
+          <ha-textfield id="columns" label="Aantal kolommen (maandknoppen)" type="number" min="1" max="6" value="${this._config.columns ?? 3}"></ha-textfield>
+          ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
       this.querySelector("#columns").addEventListener("input", (e) => this._update({ columns: Number(e.target.value) }));
-      this.querySelector("#event_types").addEventListener("change", (e) => {
-        const values = Array.from(e.target.selectedOptions).map((o) => o.value);
-        this._update({ event_types: values });
-      });
+      bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
     _update(patch) {
       this._config = { ...this._config, ...patch };
@@ -575,7 +597,10 @@
               <option value="merge">Samenvoegen</option>
               <option value="replace">Vervangen</option>
             </select>
-            <label>Inhoud (plak hier om te importeren, of gebruik Exporteren om te vullen)</label>
+            <label>Bestand kiezen (optioneel, vult de inhoud hieronder)</label>
+            <input id="io-file" type="file" accept=".json,.csv,application/json,text/csv" />
+            <div id="io-file-status" class="bd-secondary"></div>
+            <label>Inhoud (plak hier, kies een bestand hierboven, of gebruik Exporteren om te vullen)</label>
             <textarea id="io-content" rows="6"></textarea>
             <div class="bd-actions">
               <button class="bd-btn" data-action="export">Exporteren</button>
@@ -651,6 +676,33 @@
       if (downloadBtn) downloadBtn.addEventListener("click", () => this._export(true));
       const importBtn = root.querySelector('[data-action="import"]');
       if (importBtn) importBtn.addEventListener("click", () => this._import());
+      const fileInput = root.querySelector("#io-file");
+      if (fileInput) fileInput.addEventListener("change", () => this._loadFile());
+    }
+
+    _loadFile() {
+      // Deliberately does not call _render(): that would rebuild the whole
+      // panel (same class of bug as the hass-update issue above) and wipe
+      // the content/status we're about to set. Update the DOM directly
+      // instead, the same way typing in the textarea itself works.
+      const root = this.shadowRoot;
+      const file = root.querySelector("#io-file").files[0];
+      if (!file) return;
+      const statusEl = root.querySelector("#io-file-status");
+      const reader = new FileReader();
+      reader.onload = () => {
+        root.querySelector("#io-content").value = reader.result;
+        if (/\.csv$/i.test(file.name)) {
+          root.querySelector("#io-format").value = "csv";
+        } else if (/\.json$/i.test(file.name)) {
+          root.querySelector("#io-format").value = "json";
+        }
+        statusEl.textContent = `Bestand '${file.name}' geladen. Controleer de inhoud en klik op Importeren.`;
+      };
+      reader.onerror = () => {
+        statusEl.textContent = `Kon '${file.name}' niet lezen.`;
+      };
+      reader.readAsText(file);
     }
 
     async _save() {
@@ -689,6 +741,9 @@
     }
 
     async _export(download) {
+      // Same reasoning as _loadFile(): update the status text directly
+      // rather than via this._status + _render(), since a re-render here
+      // would wipe the content we just wrote into #io-content.
       const root = this.shadowRoot;
       const format = root.querySelector("#io-format").value;
       const response = await callService(this._hass, "export_events", { format }, true);
@@ -698,7 +753,7 @@
       } else {
         root.querySelector("#io-content").value = content;
       }
-      this._status = "Export klaar.";
+      root.querySelector("#io-file-status").textContent = "Export klaar.";
     }
 
     async _import() {
@@ -731,25 +786,14 @@
     }
     _render() {
       this.innerHTML = css`
-        <div class="bd-form" style="padding:16px;">
-          <label>Titel</label>
-          <input id="title" value="${this._config.title ?? ""}" />
-          <label>Type filter (leeg = alles)</label>
-          <select id="event_types" multiple size="3">
-            ${["birthday", "anniversary", "deceased"]
-              .map(
-                (t) =>
-                  `<option value="${t}" ${(this._config.event_types || []).includes(t) ? "selected" : ""}>${EVENT_TYPE_LABELS[t]}</option>`
-              )
-              .join("")}
-          </select>
+        ${EDITOR_STYLE}
+        <div class="le-editor">
+          <ha-textfield id="title" label="Titel" value="${this._config.title ?? ""}"></ha-textfield>
+          ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
-      this.querySelector("#event_types").addEventListener("change", (e) => {
-        const values = Array.from(e.target.selectedOptions).map((o) => o.value);
-        this._update({ event_types: values });
-      });
+      bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
     _update(patch) {
       this._config = { ...this._config, ...patch };

@@ -5,6 +5,18 @@ are cut until noted otherwise.
 
 ## 1.0.0-beta.3 — unreleased
 
+### Added
+- Import panel on the **Life Events: Manage** card: a file picker to load
+  a local `.json`/`.csv` file straight into the import textarea (format
+  dropdown auto-selected from the file extension), instead of only being
+  able to paste content by hand.
+- All three cards' visual editors (the config forms shown when adding/
+  editing a card from the dashboard UI) now use HA's own `ha-textfield`/
+  `ha-formfield`/`ha-checkbox`/`ha-switch` components with proper spacing,
+  instead of bare unstyled `<input>`/`<select>` elements that looked out
+  of place next to the rest of the HA UI. The event-type filter is now a
+  set of checkboxes instead of a cramped multi-select listbox.
+
 ### Fixed
 - **Life Events: Manage** card: typing into any field of the add/edit form
   (or pasting into the import textarea) was immediately overwritten,
