@@ -15,6 +15,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.life_events.const import DOMAIN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.setup import async_setup_component
 
 
 @pytest.fixture(autouse=True)
@@ -27,6 +28,13 @@ async def auto_enable_custom_integrations(enable_custom_integrations):
 
 
 async def _setup_entry(hass: HomeAssistant) -> MockConfigEntry:
+    # The bare `hass` fixture doesn't set up the `http` component, unlike a
+    # real HA instance (where it's always loaded before custom integrations
+    # get set up). Our _async_register_frontend() needs hass.http to not be
+    # None, so set it up explicitly here rather than in the integration
+    # itself - production code shouldn't guard against a state that can't
+    # actually occur outside a minimal test harness.
+    await async_setup_component(hass, "http", {})
     entry = MockConfigEntry(domain=DOMAIN, title="Life Events", data={})
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)

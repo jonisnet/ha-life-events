@@ -24,7 +24,15 @@ are cut until noted otherwise.
   `asyncio_mode = auto` - this repo's `setup.cfg` never set it, so under
   the default strict mode those fixtures landed un-awaited
   (`AttributeError: 'async_generator' object has no attribute 'data'`).
-  Added `asyncio_mode = auto` under `[tool:pytest]`.
+  Added `asyncio_mode = auto` under `[tool:pytest]`. That fix then exposed
+  a second, real gap: the bare `hass` test fixture never sets up the `http`
+  component (unlike a real HA instance, which always has it loaded before
+  custom integrations get set up), so `hass.http` was `None` when
+  `_async_register_frontend()` ran, failing `async_setup_entry` entirely.
+  Fixed in the test helper (`await async_setup_component(hass, "http",
+  {})` before setting up the config entry) rather than in the integration,
+  since production code shouldn't guard against a state that can't occur
+  outside a minimal test harness.
 
 ### Changed
 - The 🗑️ delete button no longer sits in the Manage card's list rows -
