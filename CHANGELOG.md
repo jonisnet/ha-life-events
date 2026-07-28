@@ -3,9 +3,27 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.3 — unreleased
+## 0.0.2-beta.4 — unreleased
 
 ### Fixed
+- **Important:** the device/entity-grouping fix from 0.0.2-beta.1 could
+  never actually have worked. It forwarded `DOMAIN` itself (`life_events`)
+  via `hass.config_entries.async_forward_entry_setups(entry, [DOMAIN,
+  ...])`, but HA core's `ConfigEntry.async_setup()` treats "forward to a
+  platform whose domain equals the integration's own domain" as
+  re-entering that same entry's setup (its `domain_is_integration` check),
+  which always raises `OperationNotAllowed` since that call happens from
+  inside the entry's own `async_setup_entry`. This was masked for three
+  betas by the CI failures fixed just above - once those were cleared,
+  `tests/test_init.py` immediately caught it failing for real against
+  actual HA core. Fixed by using `EntityComponent.async_setup_entry()` /
+  `.async_unload_entry()` in `__init__.py` instead of forwarding through
+  `hass.config_entries` for the `life_events` domain - the actual
+  HA-supported mechanism for entities that live directly under their own
+  integration's domain, which still produces a config-entry-bound
+  `EntityPlatform` (so device/entity registry linkage works) without
+  hitting the reentrancy guard. `Platform.CALENDAR` still forwards
+  normally, since "calendar" isn't the integration's own domain.
 - The Manage card's search box and month filter had the same "wipes on
   interaction" bug as the earlier typing fixes, just in a spot those fixes
   didn't cover: they live inline in the always-visible panel body, not

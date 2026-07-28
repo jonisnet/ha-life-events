@@ -22,6 +22,7 @@ from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.entity_component import EntityComponent
 from homeassistant.loader import async_get_integration
 
 from .const import CONF_ATTRIBUTES, CONF_BIRTHDAYS, CONF_GLOBAL_CONFIG, DOMAIN, LEGACY_YAML_KEY
@@ -88,19 +89,38 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async_register_services(hass)
     await _async_register_frontend(hass)
 
-    # DOMAIN ("life_events") itself is forwarded as a platform too, not just
-    # Platform.CALENDAR - this is what actually ties the 124+ event entities
-    # to this config entry (and therefore lets them be grouped into a
-    # device), unlike the bare EntityComponent used before. See
-    # life_events.py for the platform module this resolves to.
-    await hass.config_entries.async_forward_entry_setups(entry, [DOMAIN, Platform.CALENDAR])
+    # Event entities live directly in the life_events domain (life_events.*
+    # entity_ids, not e.g. sensor.*), same as the old ha-birthdays. That
+    # can't go through hass.config_entries.async_forward_entry_setups(entry,
+    # [DOMAIN, ...]): ConfigEntry.async_setup() treats "forward to a
+    # platform whose domain equals the integration's own domain" as
+    # re-entering the SAME entry's setup (the domain_is_integration check in
+    # HA core's config_entries.py), which always raises OperationNotAllowed
+    # since we're calling this from inside that very setup call - confirmed
+    # by tests/test_init.py actually exercising this against real HA core
+    # rather than assuming it from reading the source. EntityComponent
+    # .async_setup_entry() is the mechanism HA itself uses for entities that
+    # live under their own integration's domain: it builds the
+    # config-entry-bound EntityPlatform (which is what makes device/entity
+    # registry linkage work) and loads our life_events.py platform module
+    # directly, without going through that reentrancy-guarded path.
+    component = EntityComponent(_LOGGER, DOMAIN, hass)
+    hass.data[f"{DOMAIN}_component"] = component
+    if not await component.async_setup_entry(entry):
+        return False
+
+    await hass.config_entries.async_forward_entry_setups(entry, [Platform.CALENDAR])
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, [DOMAIN, Platform.CALENDAR])
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, [Platform.CALENDAR])
     if not unload_ok:
+        return False
+
+    component: EntityComponent = hass.data.pop(f"{DOMAIN}_component")
+    if not await component.async_unload_entry(entry):
         return False
 
     manager: LifeEventsManager = hass.data[DOMAIN].pop(entry.entry_id)
