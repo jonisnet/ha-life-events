@@ -1,10 +1,11 @@
 """The entity representing a single tracked event."""
 from __future__ import annotations
 
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_AGE_AT_NEXT_BIRTHDAY, CONF_DATE_OF_BIRTH, DOMAIN, EVENT_TYPE_DECEASED
+from .const import CONF_AGE_AT_NEXT_BIRTHDAY, CONF_DATE_OF_BIRTH, DOMAIN, DOMAIN_FRIENDLY_NAME, EVENT_TYPE_DECEASED
 
 
 class EventEntity(Entity):
@@ -16,6 +17,19 @@ class EventEntity(Entity):
         self._manager = manager
         self._event_id = event_id
         self.entity_id = f"{DOMAIN}.{event_id}"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        # Every event and the calendar entity (see calendar.py) share this
+        # same identifier, so they're grouped under one device instead of
+        # being scattered as ungrouped entities on the integration page.
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._manager.entry_id)},
+            name=DOMAIN_FRIENDLY_NAME,
+            manufacturer="jonisnet",
+            model=DOMAIN_FRIENDLY_NAME,
+            entry_type=DeviceEntryType.SERVICE,
+        )
 
     @property
     def _event(self):

@@ -3,6 +3,37 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.1 — unreleased
+
+### Fixed
+- The logo added in 0.0.1 never actually showed up anywhere in HA
+  ("icon not available" placeholder). The local-icon support it was based
+  on (home-assistant/core#161027) turned out to be superseded before it
+  shipped by a dedicated `brands` component with a different, token-gated
+  API and a stricter local-file convention: icons must live in a `brand/`
+  subfolder (`custom_components/life_events/brand/icon.png`), gated by
+  `Integration.has_branding` (`"brand" in top_level_files`) - not the
+  integration's root folder. Verified this time against the actual
+  current `homeassistant/components/brands/__init__.py` source rather
+  than an outdated PR description. Moved `icon.png`/`icon@2x.png` into
+  `brand/` accordingly.
+
+### Known issue, not yet fixed
+- The 124 event entities (`life_events.*`) aren't tied to the config
+  entry's device registry the way the calendar entity is, so **Settings →
+  Devices & services → Life Events** only lists 1 item even though the
+  page header correctly shows "125 entiteiten". Root cause: `manager.py`
+  adds them through a bare `EntityComponent(DOMAIN, hass)`, which HA's
+  `EntityComponent.__init__` binds to a platform with `config_entry=None`
+  - unlike `calendar.py`'s entity, which goes through the standard
+  `async_forward_entry_setups` path and *is* properly linked. This is
+  purely a device-registry/UI grouping issue - entity_ids, services,
+  cards, and automations are all unaffected. Fixing it properly means
+  moving event-entity setup onto a config-entry-bound `EntityPlatform`
+  instead of a bare `EntityComponent`, which touches how all 124 live
+  entities get registered - holding off on that change until discussed,
+  given the risk of disrupting real entity_ids/data if done carelessly.
+
 ## 0.0.1
 
 First real (non-prerelease) release, consolidating everything from
