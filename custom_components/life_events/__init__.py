@@ -88,13 +88,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async_register_services(hass)
     await _async_register_frontend(hass)
 
-    await hass.config_entries.async_forward_entry_setups(entry, [Platform.CALENDAR])
+    # DOMAIN ("life_events") itself is forwarded as a platform too, not just
+    # Platform.CALENDAR - this is what actually ties the 124+ event entities
+    # to this config entry (and therefore lets them be grouped into a
+    # device), unlike the bare EntityComponent used before. See
+    # life_events.py for the platform module this resolves to.
+    await hass.config_entries.async_forward_entry_setups(entry, [DOMAIN, Platform.CALENDAR])
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, [Platform.CALENDAR])
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, [DOMAIN, Platform.CALENDAR])
     if not unload_ok:
         return False
 

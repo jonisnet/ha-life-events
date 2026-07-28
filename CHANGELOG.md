@@ -18,21 +18,28 @@ are cut until noted otherwise.
   than an outdated PR description. Moved `icon.png`/`icon@2x.png` into
   `brand/` accordingly.
 
-### Known issue, not yet fixed
-- The 124 event entities (`life_events.*`) aren't tied to the config
-  entry's device registry the way the calendar entity is, so **Settings →
-  Devices & services → Life Events** only lists 1 item even though the
-  page header correctly shows "125 entiteiten". Root cause: `manager.py`
-  adds them through a bare `EntityComponent(DOMAIN, hass)`, which HA's
-  `EntityComponent.__init__` binds to a platform with `config_entry=None`
-  - unlike `calendar.py`'s entity, which goes through the standard
-  `async_forward_entry_setups` path and *is* properly linked. This is
-  purely a device-registry/UI grouping issue - entity_ids, services,
-  cards, and automations are all unaffected. Fixing it properly means
-  moving event-entity setup onto a config-entry-bound `EntityPlatform`
-  instead of a bare `EntityComponent`, which touches how all 124 live
-  entities get registered - holding off on that change until discussed,
-  given the risk of disrupting real entity_ids/data if done carelessly.
+- Event entities (`life_events.*`) weren't tied to the config entry's
+  device registry the way the calendar entity was, so **Settings →
+  Devices & services → Life Events** only listed 1 item even though the
+  page header correctly showed the full entity count. Root cause:
+  `manager.py` added them through a bare `EntityComponent(DOMAIN, hass)`,
+  whose `EntityComponent.__init__` binds to a platform with
+  `config_entry=None` - unlike `calendar.py`'s entity, which goes through
+  the standard `async_forward_entry_setups` path and *was* properly
+  linked. Fixed by forwarding `DOMAIN` itself as a platform too (new
+  `life_events.py`, following the same pattern real HA core integrations
+  use for entities that live directly under their own domain), so
+  `manager.py` now receives a real config-entry-bound `async_add_entities`
+  callback instead of using a disconnected `EntityComponent`. Both the
+  calendar and every event entity now declare the same `device_info`, so
+  they group into one shared "Life Events" device. This only changes
+  *how* entities are registered internally - entity_ids, unique_ids, and
+  stored data are untouched, so existing entity history/automations are
+  unaffected. Added `tests/test_init.py` (needs the real `homeassistant`
+  package, so only runs in CI) asserting entities are actually tied to
+  the config entry and share one device, and that unloading the entry
+  removes them all - since this specific class of bug is easy to silently
+  reintroduce and hard to catch by eye.
 
 ## 0.0.1
 

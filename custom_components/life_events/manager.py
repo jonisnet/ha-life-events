@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.entity_component import EntityComponent
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.util import dt as dt_util
 
@@ -17,7 +17,6 @@ from .const import (
     CONF_EVENT_TYPE,
     CONF_ICON,
     CONF_NAME,
-    DOMAIN,
     EVENT_TYPE_ANNIVERSARY,
     LEGACY_ANNIVERSARY_HINTS,
     SIGNAL_EVENTS_UPDATED,
@@ -36,8 +35,13 @@ class LifeEventsManager:
         self.hass = hass
         self.entry_id = entry_id
         self.store = LifeEventsStore(hass, entry_id)
-        self.component = EntityComponent(_LOGGER, DOMAIN, hass)
         self.events: dict[str, Event] = {}
+        # Set by the life_events platform's async_setup_entry (see
+        # life_events.py) once HA hands us a config-entry-scoped
+        # async_add_entities callback - only then can entities actually be
+        # created, so async_setup() below just loads the data.
+        self._async_add_entities: AddEntitiesCallback | None = None
+        self._entities: dict[str, EventEntity] = {}
         self._unsub_midnight = None
 
     @property
@@ -45,6 +49,7 @@ class LifeEventsManager:
         return f"{SIGNAL_EVENTS_UPDATED}_{self.entry_id}"
 
     async def async_setup(self, legacy_yaml_birthdays: list[dict] | None) -> None:
+        """Load event data from storage/legacy YAML. Does not create entities yet."""
         events = await self.store.async_load()
 
         if not events and legacy_yaml_birthdays:
@@ -56,17 +61,22 @@ class LifeEventsManager:
             await self.store.async_save(events)
 
         self.events = {e.id: e for e in events}
-        await self.component.async_add_entities(
-            [EventEntity(self, event_id) for event_id in self.events]
-        )
+
+    async def async_setup_entities(self, async_add_entities: AddEntitiesCallback) -> None:
+        """Called by the life_events platform once it has a real, config-entry-bound callback."""
+        self._async_add_entities = async_add_entities
+        self._entities = {event_id: EventEntity(self, event_id) for event_id in self.events}
+        async_add_entities(list(self._entities.values()))
         self._recompute_states()
         self._schedule_midnight_update()
 
     async def async_unload(self) -> None:
+        # Entities themselves are torn down by HA's own platform unload
+        # (see async_unload_entry in __init__.py, which unloads the
+        # life_events platform before calling this) - only the timer needs
+        # explicit cleanup here.
         if self._unsub_midnight:
             self._unsub_midnight()
-        for entity in list(self.component.entities):
-            await entity.async_remove(force_remove=True)
 
     def _schedule_midnight_update(self) -> None:
         def _seconds_until_midnight() -> float:
@@ -82,7 +92,7 @@ class LifeEventsManager:
         self._unsub_midnight = async_call_later(self.hass, _seconds_until_midnight(), _midnight)
 
     def _recompute_states(self) -> None:
-        for entity in self.component.entities:
+        for entity in self._entities.values():
             entity.async_write_ha_state()
 
     def _fire_today_events(self) -> None:
@@ -105,7 +115,9 @@ class LifeEventsManager:
         event = Event.create(**fields)
         self.events[event.id] = event
         await self.store.async_save(list(self.events.values()))
-        await self.component.async_add_entities([EventEntity(self, event.id)])
+        new_entity = EventEntity(self, event.id)
+        self._entities[event.id] = new_entity
+        self._async_add_entities([new_entity])
         async_dispatcher_send(self.hass, self.signal)
         return event
 
@@ -126,7 +138,7 @@ class LifeEventsManager:
         updated = Event.create(**merged)
         self.events[event_id] = updated
         await self.store.async_save(list(self.events.values()))
-        entity = self.component.get_entity(f"{DOMAIN}.{event_id}")
+        entity = self._entities.get(event_id)
         if entity:
             entity.async_write_ha_state()
         async_dispatcher_send(self.hass, self.signal)
@@ -137,7 +149,7 @@ class LifeEventsManager:
             return
         del self.events[event_id]
         await self.store.async_save(list(self.events.values()))
-        entity = self.component.get_entity(f"{DOMAIN}.{event_id}")
+        entity = self._entities.pop(event_id, None)
         if entity:
             await entity.async_remove(force_remove=True)
         async_dispatcher_send(self.hass, self.signal)
@@ -146,8 +158,9 @@ class LifeEventsManager:
         new_events = parse_events(content, fmt)
 
         if mode == "replace":
-            for entity in list(self.component.entities):
+            for entity in list(self._entities.values()):
                 await entity.async_remove(force_remove=True)
+            self._entities = {}
             self.events = {}
 
         for event in new_events:
@@ -155,10 +168,11 @@ class LifeEventsManager:
 
         await self.store.async_save(list(self.events.values()))
 
-        existing_ids = {e.entity_id.split(".", 1)[1] for e in self.component.entities}
-        to_add = [EventEntity(self, e.id) for e in new_events if e.id not in existing_ids]
+        to_add = [EventEntity(self, e.id) for e in new_events if e.id not in self._entities]
+        for new_entity in to_add:
+            self._entities[new_entity.unique_id] = new_entity
         if to_add:
-            await self.component.async_add_entities(to_add)
+            self._async_add_entities(to_add)
 
         self._recompute_states()
         async_dispatcher_send(self.hass, self.signal)
