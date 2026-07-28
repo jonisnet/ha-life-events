@@ -15,6 +15,14 @@ are cut until noted otherwise.
   CSV/JSON import/export.
 - Foundational work for an upcoming automation blueprint that will use this
   field to notify a phone number.
+- Automation blueprint `blueprints/automation/jonisnet/notify_todays_events.yaml`:
+  runs once a day, finds every `life_events.*` entity happening today for the
+  configured event types (no separate helper sensor needed), and runs a
+  user-supplied notification action per person with `person_name`,
+  `phone_number` (E.164) and `phone_number_wa` (E.164 without the leading
+  `+`, ready for a `https://wa.me/` link) available as variables. Optionally
+  adds a to-do item per event. Modeled on a real WhatsApp-notification +
+  to-do automation already in use.
 
 ## 1.0.0-beta.1
 

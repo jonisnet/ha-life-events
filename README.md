@@ -141,10 +141,24 @@ automation:
         message: "{{ trigger.event.data.name }} turns {{ trigger.event.data.age }} today!"
 ```
 
+### Blueprint
+
+`blueprints/automation/jonisnet/notify_todays_events.yaml` runs once a day,
+finds every event happening that day (for the event types you pick), and
+runs your own notification action per person — no separate helper sensor
+needed. Available variables in your notification action: `person_name`,
+`entity_id`, `event_type`, `age`, `phone_number` (E.164), `phone_number_wa`
+(same number without the leading `+`, e.g. for a `https://wa.me/` link).
+It can also add a to-do item per event, if you configure a to-do list.
+
+Import it via **Settings → Automations → ⋮ → Import blueprint**, pasting:
+
+```
+https://raw.githubusercontent.com/jonisnet/ha-life-events/master/blueprints/automation/jonisnet/notify_todays_events.yaml
+```
+
 ## Roadmap
 
 Planned for an upcoming beta, not yet in v1.0.0-beta.1:
 
-- An official automation blueprint matching a real notification setup, using
-  the phone number field above.
 - A bundled example dashboard.

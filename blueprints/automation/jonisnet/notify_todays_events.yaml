@@ -1,0 +1,98 @@
+blueprint:
+  name: Life Events - Daily notification
+  description: >-
+    Runs once a day and finds every Life Events entity (birthday, anniversary,
+    ...) whose next occurrence is today, then runs your notification
+    action(s) for each one - plus, optionally, adds a to-do item.
+
+    No separate helper sensor is needed: this reads the `life_events.*`
+    entities directly (state 0 = happening today).
+  domain: automation
+  source_url: https://github.com/jonisnet/ha-life-events/blob/master/blueprints/automation/jonisnet/notify_todays_events.yaml
+  input:
+    notify_time:
+      name: Time to check
+      description: What time of day to run the check.
+      default: "08:00:00"
+      selector:
+        time: {}
+    event_types:
+      name: Event types
+      description: Which event types to include.
+      default:
+        - birthday
+        - anniversary
+      selector:
+        select:
+          multiple: true
+          mode: list
+          options:
+            - label: Birthday
+              value: birthday
+            - label: Anniversary
+              value: anniversary
+            - label: Deceased
+              value: deceased
+    todo_list:
+      name: To-do list (optional)
+      description: If set, adds a to-do item for each matching event today.
+      default: ""
+      selector:
+        entity:
+          domain: todo
+    notify_action:
+      name: Notification action(s)
+      description: >-
+        What to do for each matching event, run once per person. Available
+        variables: `person_name`, `entity_id`, `event_type`, `age` (years,
+        set for birthday/anniversary), `phone_number` (E.164, e.g.
+        +31612345678 - only set if filled in on the event, and only for
+        birthday/anniversary events), `phone_number_wa` (same number
+        without the leading "+", ready to use in a
+        `https://wa.me/{{ phone_number_wa }}` link).
+      selector:
+        action: {}
+
+trigger:
+  - trigger: time
+    at: !input notify_time
+
+action:
+  - variables:
+      allowed_types: !input event_types
+      todo_list: !input todo_list
+  - variables:
+      todays_entities: >-
+        {% set ns = namespace(matches=[]) %}
+        {% for s in states.life_events %}
+          {% if s.state == '0' and s.attributes.get('event_type') in allowed_types %}
+            {% set ns.matches = ns.matches + [s.entity_id] %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.matches }}
+  - repeat:
+      for_each: "{{ todays_entities }}"
+      sequence:
+        - variables:
+            entity_id: "{{ repeat.item }}"
+            person_name: "{{ state_attr(repeat.item, 'friendly_name') }}"
+            event_type: "{{ state_attr(repeat.item, 'event_type') }}"
+            age: "{{ state_attr(repeat.item, 'age_at_next_birthday') }}"
+            phone_number: "{{ state_attr(repeat.item, 'phone_number') }}"
+            phone_number_wa: "{{ (state_attr(repeat.item, 'phone_number') or '') | replace('+', '') }}"
+        - if:
+            - condition: template
+              value_template: "{{ todo_list not in (None, '') }}"
+          then:
+            - action: todo.add_item
+              target:
+                entity_id: "{{ todo_list }}"
+              data:
+                item: "{{ 'Jubileum' if event_type == 'anniversary' else 'Verjaardag' }}"
+                description: >-
+                  {{ person_name }} {{ 'jubileum vandaag' if event_type == 'anniversary' else 'is jarig' }}
+        - choose:
+            - conditions: []
+              sequence: !input notify_action
+
+mode: single
