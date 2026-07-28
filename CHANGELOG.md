@@ -3,7 +3,45 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 1.0.0-beta.6 — unreleased
+## 1.0.0-beta.7 — unreleased
+
+### Added
+- **Life Events: Manage** card: a live search box (filters by name) and a
+  month filter, at the top of the card so they stay put while the list
+  below scrolls. These filter the runtime list only (independent of the
+  card's own `event_types` config option); typing in the search box
+  updates the list without losing focus, via a targeted DOM update rather
+  than a full re-render.
+
+### Fixed
+- `calendar.py`'s dispatcher-connected `_handle_update` was missing the
+  `@callback` decorator, so Home Assistant assumed it might be blocking
+  and ran it in a worker thread - where `async_write_ha_state()` isn't
+  safe to call, producing `RuntimeError: Detected that custom integration
+  'life_events' calls async_write_ha_state from a thread other than the
+  event loop` every time an event was added/updated/deleted/imported.
+  Found via the user's HA logs while debugging the card-loading issue
+  below; unrelated to it, but a real stability/data-corruption risk per
+  Home Assistant's own warning, so fixed immediately.
+- The three card config editors' `Titel`/number fields (e.g. "Aantal
+  dagen vooruit") were silently not rendering at all, while the switch
+  and checkboxes next to them worked fine. Cause: `ha-textfield` doesn't
+  reliably render when loaded from a third-party `extra_module_url`
+  script rather than HA's own settings UI (unlike `ha-formfield`/
+  `ha-switch`/`ha-checkbox`, which are more broadly available). Replaced
+  with a plain, self-styled `<input>` that behaves identically but
+  doesn't depend on that component being available.
+
+### Diagnosed, not a code bug
+- If the card never appears to update after installing a new version
+  despite a full HA restart and the backend log confirming registration
+  (`Life Events cards served at ... ?v=<version>`), check whether HA's
+  frontend **Service Worker** is serving a stale cached page shell -
+  this can survive a normal hard refresh. Test in a fresh incognito
+  window; if that works, unregister the service worker and clear site
+  data in your normal browser (DevTools -> Application).
+
+## 1.0.0-beta.6
 
 ### Fixed
 - The real remaining cause of "can't type in the card" reports after

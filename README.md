@@ -103,6 +103,16 @@ frontend resource. If your dashboard doesn't pick them up automatically,
 add `/life_events_static/life-events-cards.js` as a Lovelace resource
 (**Settings → Dashboards → ⋮ → Resources**, type: JavaScript module).
 
+**After updating and restarting HA, the cards still look/behave like an
+older version?** Check the HA log for a line containing `cards served at`
+(**Settings → System → Logs**, search `life_events`) — if it shows the
+current `?v=<version>`, the backend is registering the right file and the
+problem is your browser's cache. First try an incognito/private window; if
+that's fixed, your normal browser's frontend **Service Worker** is likely
+serving a stale cached page shell (this can survive a normal hard refresh).
+Fix it via DevTools → Application → Service Workers → Unregister, then
+Application → Storage → Clear site data.
+
 - **Life Events: Upcoming** (`life-events-upcoming-card`) — list of events in
   the next N days.
 - **Life Events: Month overview** (`life-events-month-card`) — month picker +

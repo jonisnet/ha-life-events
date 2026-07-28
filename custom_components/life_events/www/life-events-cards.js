@@ -19,7 +19,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v1.0.0-beta.6 loaded");
+  console.info("Life Events cards: v1.0.0-beta.7 loaded");
 
   const DOMAIN = "life_events";
 
@@ -221,19 +221,36 @@
   // ---------------------------------------------------------------------
   // Shared visual editor styling + widgets. Editors render into light DOM
   // (this.innerHTML, not a shadow root), so this <style> tag is included
-  // directly in that markup. They use HA's own ha-textfield/ha-formfield/
-  // ha-checkbox/ha-switch elements (already globally registered by the HA
-  // frontend) instead of bare <input>/<select>, so they look native
-  // instead of like unstyled browser form controls.
+  // directly in that markup. ha-formfield/ha-checkbox/ha-switch (already
+  // globally registered by the HA frontend) render fine here, but
+  // ha-textfield does not reliably render when loaded from a third-party
+  // extra-module-url script rather than HA's own settings UI, so text/
+  // number fields use a plain, self-styled <input> instead.
   // ---------------------------------------------------------------------
   const EDITOR_STYLE = css`
     <style>
       .le-editor { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
-      .le-editor ha-textfield { width: 100%; }
+      .le-editor-field { display: flex; flex-direction: column; gap: 4px; }
+      .le-editor-field label { font-size: 12px; color: var(--secondary-text-color); }
+      .le-editor-field input {
+        font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 6px;
+        border: 1px solid var(--divider-color); background: var(--card-background-color);
+        color: var(--primary-text-color); width: 100%; box-sizing: border-box;
+      }
+      .le-editor-field input:focus { outline: none; border-color: var(--primary-color); }
       .le-editor-label { font-size: 12px; color: var(--secondary-text-color); margin-bottom: -8px; }
       .le-editor-types { display: flex; flex-wrap: wrap; gap: 4px 16px; }
     </style>
   `;
+
+  function renderEditorField(id, label, value, extraAttrs) {
+    return css`
+      <div class="le-editor-field">
+        <label for="${id}">${label}</label>
+        <input id="${id}" value="${value}" ${extraAttrs || ""} />
+      </div>
+    `;
+  }
 
   function renderEventTypeCheckboxes(selectedTypes) {
     const selected = selectedTypes || [];
@@ -319,6 +336,9 @@
             .bd-form label { font-size: 12px; color: var(--secondary-text-color); }
             .bd-form input, .bd-form select, .bd-form textarea { padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
             .bd-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+            .bd-filters { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+            .bd-filters input, .bd-filters select { padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
+            .bd-filters input { flex: 1; min-width: 120px; }
             button.bd-btn { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; background: var(--primary-color); color: var(--text-primary-color, #fff); font: inherit; }
             button.bd-btn.secondary { background: var(--secondary-background-color); color: var(--primary-text-color); }
             button.bd-btn.danger { background: var(--error-color, #db4437); color: #fff; }
@@ -391,8 +411,8 @@
       this.innerHTML = css`
         ${EDITOR_STYLE}
         <div class="le-editor">
-          <ha-textfield id="title" label="Titel" value="${this._config.title ?? ""}"></ha-textfield>
-          <ha-textfield id="days_ahead" label="Aantal dagen vooruit" type="number" min="1" value="${this._config.days_ahead ?? 14}"></ha-textfield>
+          ${renderEditorField("title", "Titel", this._config.title ?? "")}
+          ${renderEditorField("days_ahead", "Aantal dagen vooruit", this._config.days_ahead ?? 14, 'type="number" min="1"')}
           <ha-formfield label="Toon icoon">
             <ha-switch id="show_icon" ${this._config.show_icon !== false ? "checked" : ""}></ha-switch>
           </ha-formfield>
@@ -489,8 +509,8 @@
       this.innerHTML = css`
         ${EDITOR_STYLE}
         <div class="le-editor">
-          <ha-textfield id="title" label="Titel" value="${this._config.title ?? ""}"></ha-textfield>
-          <ha-textfield id="columns" label="Aantal kolommen (maandknoppen)" type="number" min="1" max="6" value="${this._config.columns ?? 3}"></ha-textfield>
+          ${renderEditorField("title", "Titel", this._config.title ?? "")}
+          ${renderEditorField("columns", "Aantal kolommen (maandknoppen)", this._config.columns ?? 3, 'type="number" min="1" max="6"')}
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
@@ -520,19 +540,24 @@
       this._formOpen = false;
       this._importOpen = false;
       this._status = "";
+      this._searchQuery = "";
+      this._monthFilter = "";
     }
 
-    _render() {
-      if (!this._hass) return;
-      // Kept in sync here (rather than at every _formOpen/_importOpen
-      // toggle site) so a later hass update skips re-rendering while the
-      // add/edit form or import textarea is open - otherwise every hass
-      // tick (any entity changing state, anywhere in HA) would wipe out
-      // whatever the user is currently typing.
-      this._suppressRender = this._formOpen || this._importOpen;
-      const events = getEvents(this._hass, this._config.event_types).sort((a, b) => a.name.localeCompare(b.name));
+    // Base list for this card (config's event_types filter only). Used for
+    // the editing lookup, independent of the live search/month filter -
+    // you're always editing something already visible when you click it.
+    _baseEvents() {
+      return getEvents(this._hass, this._config.event_types).sort((a, b) => a.name.localeCompare(b.name));
+    }
 
-      const rows = events.length
+    _rowsHtml() {
+      const q = this._searchQuery.trim().toLowerCase();
+      const events = this._baseEvents()
+        .filter((e) => !q || e.name.toLowerCase().includes(q))
+        .filter((e) => !this._monthFilter || monthOf(e.date) === Number(this._monthFilter));
+
+      return events.length
         ? events
             .map(
               (e) => css`
@@ -552,9 +577,47 @@
             `
             )
             .join("")
-        : `<div class="bd-empty">Nog geen gebeurtenissen.</div>`;
+        : `<div class="bd-empty">Geen gebeurtenissen gevonden.</div>`;
+    }
 
-      const editing = this._editingId ? events.find((e) => e.entity_id === `${DOMAIN}.${this._editingId}`) : null;
+    // Targeted update: only replaces the list container, so the search
+    // input keeps focus while the user types (same reasoning as
+    // _suppressRender - a full _render() here would wipe it).
+    _renderList() {
+      const list = this.shadowRoot.querySelector("#le-list");
+      if (!list) return;
+      list.innerHTML = this._rowsHtml();
+      this._bindListEvents();
+    }
+
+    _bindListEvents() {
+      const list = this.shadowRoot.querySelector("#le-list");
+      if (!list) return;
+      list.querySelectorAll('[data-action="edit"]').forEach((btn) =>
+        btn.addEventListener("click", () => {
+          this._editingId = btn.dataset.id;
+          this._formOpen = true;
+          this._render();
+        })
+      );
+      list.querySelectorAll('[data-action="delete"]').forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          if (!confirm("Deze gebeurtenis verwijderen?")) return;
+          await callService(this._hass, "delete_event", { event_id: btn.dataset.id });
+        })
+      );
+    }
+
+    _render() {
+      if (!this._hass) return;
+      // Kept in sync here (rather than at every _formOpen/_importOpen
+      // toggle site) so a later hass update skips re-rendering while the
+      // add/edit form or import textarea is open - otherwise every hass
+      // tick (any entity changing state, anywhere in HA) would wipe out
+      // whatever the user is currently typing.
+      this._suppressRender = this._formOpen || this._importOpen;
+
+      const editing = this._editingId ? this._baseEvents().find((e) => e.entity_id === `${DOMAIN}.${this._editingId}`) : null;
 
       const form = this._formOpen
         ? css`
@@ -628,34 +691,32 @@
         : "";
 
       this._shell(css`
-        ${rows}
+        <div class="bd-filters">
+          <input id="f-search" placeholder="Zoek op naam..." value="${this._searchQuery}" />
+          <select id="f-month-filter">
+            <option value="">Alle maanden</option>
+            ${MONTHS_NL.map(
+              (m, i) => `<option value="${i + 1}" ${Number(this._monthFilter) === i + 1 ? "selected" : ""}>${m}</option>`
+            ).join("")}
+          </select>
+        </div>
         <div class="bd-actions">
           ${!this._formOpen ? `<button class="bd-btn" data-action="add">+ Toevoegen</button>` : ""}
           ${!this._importOpen ? `<button class="bd-btn secondary" data-action="io">Import / export</button>` : ""}
         </div>
+        <div id="le-list">${this._rowsHtml()}</div>
         ${form}
         ${importExport}
         ${this._status ? `<div class="bd-secondary" style="margin-top:8px;">${this._status}</div>` : ""}
       `);
 
       this._bindEvents();
+      this._bindFilterEvents();
     }
 
     _bindEvents() {
       const root = this.shadowRoot;
-      root.querySelectorAll('[data-action="edit"]').forEach((btn) =>
-        btn.addEventListener("click", () => {
-          this._editingId = btn.dataset.id;
-          this._formOpen = true;
-          this._render();
-        })
-      );
-      root.querySelectorAll('[data-action="delete"]').forEach((btn) =>
-        btn.addEventListener("click", async () => {
-          if (!confirm("Deze gebeurtenis verwijderen?")) return;
-          await callService(this._hass, "delete_event", { event_id: btn.dataset.id });
-        })
-      );
+      this._bindListEvents();
       const addBtn = root.querySelector('[data-action="add"]');
       if (addBtn)
         addBtn.addEventListener("click", () => {
@@ -693,6 +754,22 @@
       if (importBtn) importBtn.addEventListener("click", () => this._import());
       const fileInput = root.querySelector("#io-file");
       if (fileInput) fileInput.addEventListener("change", () => this._loadFile());
+    }
+
+    _bindFilterEvents() {
+      const root = this.shadowRoot;
+      const searchInput = root.querySelector("#f-search");
+      if (searchInput)
+        searchInput.addEventListener("input", (e) => {
+          this._searchQuery = e.target.value;
+          this._renderList();
+        });
+      const monthSelect = root.querySelector("#f-month-filter");
+      if (monthSelect)
+        monthSelect.addEventListener("change", (e) => {
+          this._monthFilter = e.target.value;
+          this._renderList();
+        });
     }
 
     _loadFile() {
@@ -804,7 +881,7 @@
       this.innerHTML = css`
         ${EDITOR_STYLE}
         <div class="le-editor">
-          <ha-textfield id="title" label="Titel" value="${this._config.title ?? ""}"></ha-textfield>
+          ${renderEditorField("title", "Titel", this._config.title ?? "")}
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
