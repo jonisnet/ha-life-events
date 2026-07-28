@@ -28,13 +28,16 @@ async def auto_enable_custom_integrations(enable_custom_integrations):
 
 
 async def _setup_entry(hass: HomeAssistant) -> MockConfigEntry:
-    # The bare `hass` fixture doesn't set up the `http` component, unlike a
-    # real HA instance (where it's always loaded before custom integrations
-    # get set up). Our _async_register_frontend() needs hass.http to not be
-    # None, so set it up explicitly here rather than in the integration
-    # itself - production code shouldn't guard against a state that can't
-    # actually occur outside a minimal test harness.
+    # The bare `hass` fixture doesn't set up the `http`/`frontend` components,
+    # unlike a real HA instance (where they're always loaded before custom
+    # integrations get set up). Our _async_register_frontend() needs
+    # hass.http to not be None and add_extra_js_url() needs frontend's
+    # hass.data key to already exist, so set both up explicitly here rather
+    # than in the integration itself - production code shouldn't guard
+    # against a state that can't actually occur outside a minimal test
+    # harness.
     await async_setup_component(hass, "http", {})
+    await async_setup_component(hass, "frontend", {})
     entry = MockConfigEntry(domain=DOMAIN, title="Life Events", data={})
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
