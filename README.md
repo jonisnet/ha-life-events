@@ -157,8 +157,12 @@ Import it via **Settings → Automations → ⋮ → Import blueprint**, pasting
 https://raw.githubusercontent.com/jonisnet/ha-life-events/master/blueprints/automation/jonisnet/notify_todays_events.yaml
 ```
 
-## Roadmap
+## Example dashboard
 
-Planned for an upcoming beta, not yet in v1.0.0-beta.1:
+`dashboards/life_events.yaml` combines the three bundled cards into a single
+ready-made view: Upcoming (30 days) and Month overview side by side, with
+Manage below.
 
-- A bundled example dashboard.
+To use it: **Settings → Dashboards → + Add dashboard → New dashboard from
+scratch**, then open its **⋮ → Edit in YAML** and paste the contents of that
+file (or copy just the `cards:` block into an existing view).

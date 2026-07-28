@@ -1,0 +1,16 @@
+title: Levensgebeurtenissen
+views:
+  - title: Levensgebeurtenissen
+    path: life-events
+    icon: mdi:cake
+    cards:
+      - type: horizontal-stack
+        cards:
+          - type: custom:life-events-upcoming-card
+            title: Aankomende gebeurtenissen
+            days_ahead: 30
+          - type: custom:life-events-month-card
+            title: Per maand
+            columns: 3
+      - type: custom:life-events-manage-card
+        title: Beheren

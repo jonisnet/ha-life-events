@@ -23,6 +23,8 @@ are cut until noted otherwise.
   `+`, ready for a `https://wa.me/` link) available as variables. Optionally
   adds a to-do item per event. Modeled on a real WhatsApp-notification +
   to-do automation already in use.
+- Example dashboard `dashboards/life_events.yaml`: Upcoming + Month overview
+  side by side, Manage below.
 
 ## 1.0.0-beta.1
 
