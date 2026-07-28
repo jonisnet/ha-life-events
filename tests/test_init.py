@@ -18,7 +18,11 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 
 @pytest.fixture(autouse=True)
-def auto_enable_custom_integrations(enable_custom_integrations):
+async def auto_enable_custom_integrations(enable_custom_integrations):
+    # Must be async def, not plain def: under pytest-asyncio strict mode,
+    # a sync fixture depending on the (async) enable_custom_integrations/
+    # hass fixtures gets handed the unresolved async_generator object
+    # instead of the awaited value.
     yield
 
 
