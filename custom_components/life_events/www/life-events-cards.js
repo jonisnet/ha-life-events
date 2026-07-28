@@ -16,6 +16,11 @@
  * persons) date_of_death.
  */
 (() => {
+  // Bump alongside manifest.json's version. Check this in the browser
+  // console after an update to confirm the fresh file actually loaded,
+  // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
+  console.info("Life Events cards: v1.0.0-beta.4 loaded");
+
   const DOMAIN = "life_events";
 
   const MONTHS_NL = [

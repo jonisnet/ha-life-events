@@ -22,6 +22,7 @@ from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
+from homeassistant.loader import async_get_integration
 
 from .const import CONF_ATTRIBUTES, CONF_BIRTHDAYS, CONF_GLOBAL_CONFIG, DOMAIN, LEGACY_YAML_KEY
 from .manager import LifeEventsManager
@@ -111,7 +112,13 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     hass.data[f"{DOMAIN}_frontend_registered"] = True
 
     www_path = Path(__file__).parent / "www"
-    js_url = f"{FRONTEND_URL_BASE}/{CARD_FILENAME}"
+    integration = await async_get_integration(hass, DOMAIN)
+    # Cache-bust on the integration version: without this, the URL never
+    # changes between releases, so browsers (and HA's own frontend) can
+    # keep serving an old cached copy of the card JS indefinitely after an
+    # update, even past a restart - the fix silently "not working" is
+    # actually the browser never re-fetching it.
+    js_url = f"{FRONTEND_URL_BASE}/{CARD_FILENAME}?v={integration.version}"
 
     try:
         from homeassistant.components.http import StaticPathConfig

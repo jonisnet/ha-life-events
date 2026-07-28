@@ -3,7 +3,21 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 1.0.0-beta.3 — unreleased
+## 1.0.0-beta.4 — unreleased
+
+### Fixed
+- The bundled card JS was served from a fixed URL (`/life_events_static/
+  life-events-cards.js`) that never changed between versions, so browsers
+  (and HA's own frontend) could keep serving an old cached copy
+  indefinitely after an update - including past a restart, since nothing
+  ever told them the file had changed. This meant the beta.3 typing fix
+  could silently appear "not to work" for anyone who'd already loaded an
+  older copy once. The registered URL now includes `?v=<integration
+  version>`, so every version bump forces a fresh fetch. **Requires a full
+  Home Assistant restart** (not just "Reload" on the integration) to take
+  effect, since the URL is registered once per HA process run.
+
+## 1.0.0-beta.3
 
 ### Added
 - Import panel on the **Life Events: Manage** card: a file picker to load
