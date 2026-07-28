@@ -3,7 +3,18 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 1.0.0-beta.2 — unreleased
+## 1.0.0-beta.3 — unreleased
+
+### Fixed
+- **Life Events: Manage** card: typing into any field of the add/edit form
+  (or pasting into the import textarea) was immediately overwritten,
+  making the form unusable. Cause: the card fully re-rendered on every
+  `hass` update, which fires on *any* entity's state change anywhere in
+  HA (not just this integration's), wiping the in-progress input before
+  the next keystroke registered. Fixed by skipping re-render while the
+  form or import panel is open.
+
+## 1.0.0-beta.2
 
 ### Added
 - `phone_number` event field (E.164 format), only meaningful for

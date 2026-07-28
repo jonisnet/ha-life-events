@@ -231,6 +231,11 @@
 
     set hass(hass) {
       this._hass = hass;
+      // Skip re-rendering while a form/textarea is open (e.g. the Manage
+      // card's add/edit form or import panel): hass updates on every state
+      // change anywhere in HA, and a full re-render would wipe out
+      // whatever the user is currently typing.
+      if (this._suppressRender) return;
       this._render();
     }
 
@@ -482,6 +487,12 @@
 
     _render() {
       if (!this._hass) return;
+      // Kept in sync here (rather than at every _formOpen/_importOpen
+      // toggle site) so a later hass update skips re-rendering while the
+      // add/edit form or import textarea is open - otherwise every hass
+      // tick (any entity changing state, anywhere in HA) would wipe out
+      // whatever the user is currently typing.
+      this._suppressRender = this._formOpen || this._importOpen;
       const events = getEvents(this._hass, this._config.event_types).sort((a, b) => a.name.localeCompare(b.name));
 
       const rows = events.length
