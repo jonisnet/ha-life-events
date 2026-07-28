@@ -3,7 +3,21 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 1.0.0-beta.8 — unreleased
+## 0.0.1
+
+First real (non-prerelease) release, consolidating everything from
+1.0.0-beta.1 through 1.0.0-beta.8 below - the rename from ha-birthdays, the
+phone number field, the notification blueprint, the example dashboard, the
+logo, several real bugfixes (the Manage card typing bug and its root
+causes, a calendar.py thread-safety issue, stale-cache handling), and the
+Manage card's search/filter and popup-based editing.
+
+Versioned `0.0.1` rather than `1.0.0` deliberately: development continues
+in beta (`0.0.x-beta.N`) until the integration is considered ready for a
+real `1.0.0`. A non-prerelease tag exists now specifically so HACS/HA stop
+reporting "not on the latest version" against a prerelease tag.
+
+## 1.0.0-beta.8 (folded into 0.0.1 above)
 
 ### Added
 - The add/edit-person form and the import/export panel now open as a
