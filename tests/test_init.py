@@ -87,7 +87,7 @@ async def test_calendar_and_events_share_one_device(hass: HomeAssistant) -> None
     assert all(e.device_id == devices[0].id for e in entries_for_config_entry)
 
 
-async def test_unload_entry_removes_all_entities(hass: HomeAssistant) -> None:
+async def test_unload_entry_marks_entities_unavailable(hass: HomeAssistant) -> None:
     entry = await _setup_entry(hass)
 
     await hass.services.async_call(
@@ -105,9 +105,12 @@ async def test_unload_entry_removes_all_entities(hass: HomeAssistant) -> None:
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
 
-    # Unloading removes entity *state* but deliberately keeps entity
-    # *registry* entries around (that's what preserves entity_id/area/
-    # customizations across a reload) - registry entries only disappear on
-    # full entry removal (hass.config_entries.async_remove), not unload.
+    # Unloading (default force_remove=False) marks entities unavailable
+    # rather than deleting their state outright, and deliberately keeps
+    # entity *registry* entries around too (that's what preserves
+    # entity_id/area/customizations across a reload) - both only fully
+    # disappear on complete entry removal (hass.config_entries.async_remove),
+    # not a plain unload.
     for entity_id in entity_ids:
-        assert hass.states.get(entity_id) is None
+        state = hass.states.get(entity_id)
+        assert state is not None and state.state == "unavailable"

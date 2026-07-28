@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.5 — unreleased
+## 0.0.2-beta.6 — unreleased
 
 ### Fixed
 - **Important:** the device/entity-grouping fix from 0.0.2-beta.1 could
@@ -28,8 +28,12 @@ are cut until noted otherwise.
   asserted entity registry entries disappear on `async_unload`, but that's
   not real HA behavior - unloading only removes entity *state*, registry
   entries (entity_id, area, customizations) deliberately survive until the
-  entry is fully *removed*. Test now checks `hass.states.get(...) is None`
-  instead.
+  entry is fully *removed*. And that fix exposed a third: unload doesn't
+  delete entity *state* either - `Entity.async_remove()` defaults to
+  `force_remove=False`, which marks the state `unavailable` rather than
+  deleting it, again so a quick reload doesn't lose the last-known state.
+  Test now checks `hass.states.get(...).state == "unavailable"`, renamed
+  to `test_unload_entry_marks_entities_unavailable`.
 - The Manage card's search box and month filter had the same "wipes on
   interaction" bug as the earlier typing fixes, just in a spot those fixes
   didn't cover: they live inline in the always-visible panel body, not
