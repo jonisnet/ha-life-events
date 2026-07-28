@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Life Events",
+        "description": "Track birthdays, anniversaries and (optionally) deceased loved ones. You can manage everything from the Life Events cards afterwards."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Life Events is already set up. Only one instance is needed."
+    }
+  }
+}

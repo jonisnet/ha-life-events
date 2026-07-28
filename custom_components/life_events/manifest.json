@@ -1,0 +1,12 @@
+{
+    "domain": "life_events",
+    "name": "Life Events",
+    "documentation": "https://github.com/jonisnet/ha-life-events",
+    "issue_tracker": "https://github.com/jonisnet/ha-life-events/issues",
+    "dependencies": [],
+    "codeowners": ["@jonisnet"],
+    "requirements": [],
+    "config_flow": true,
+    "iot_class": "local_push",
+    "version": "1.0.0-beta.1"
+}

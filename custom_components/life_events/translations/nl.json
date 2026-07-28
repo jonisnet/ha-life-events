@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Levensgebeurtenissen instellen",
+        "description": "Houd verjaardagen, jubilea en (optioneel) overleden dierbaren bij. Na het toevoegen beheer je alles via de Levensgebeurtenissen-kaarten."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Levensgebeurtenissen is al ingesteld. Er is maar één instantie nodig."
+    }
+  }
+}

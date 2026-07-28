@@ -1,0 +1,128 @@
+add_event:
+  name: Add event
+  description: Add a birthday, anniversary or deceased entry.
+  fields:
+    name:
+      required: true
+      example: "Frodo Baggins"
+      selector:
+        text:
+    date:
+      required: true
+      example: "1921-09-22"
+      selector:
+        date:
+    event_type:
+      required: false
+      default: birthday
+      selector:
+        select:
+          options:
+            - birthday
+            - anniversary
+            - deceased
+    event_id:
+      required: false
+      description: Optional stable id/entity_id suffix. Auto-generated from the name if omitted.
+      selector:
+        text:
+    date_of_death:
+      required: false
+      selector:
+        date:
+    icon:
+      required: false
+      example: "mdi:cake"
+      selector:
+        icon:
+    attributes:
+      required: false
+      description: Freeform extra attributes (key/value pairs).
+      selector:
+        object:
+
+update_event:
+  name: Update event
+  description: Update an existing event. Only the provided fields are changed.
+  fields:
+    event_id:
+      required: true
+      selector:
+        text:
+    name:
+      required: false
+      selector:
+        text:
+    date:
+      required: false
+      selector:
+        date:
+    event_type:
+      required: false
+      selector:
+        select:
+          options:
+            - birthday
+            - anniversary
+            - deceased
+    date_of_death:
+      required: false
+      selector:
+        date:
+    icon:
+      required: false
+      selector:
+        icon:
+    attributes:
+      required: false
+      selector:
+        object:
+
+delete_event:
+  name: Delete event
+  description: Remove an event.
+  fields:
+    event_id:
+      required: true
+      selector:
+        text:
+
+import_events:
+  name: Import events
+  description: Bulk import events from a CSV or JSON string.
+  fields:
+    content:
+      required: true
+      selector:
+        text:
+          multiline: true
+    format:
+      required: false
+      default: json
+      selector:
+        select:
+          options:
+            - csv
+            - json
+    mode:
+      required: false
+      default: merge
+      description: "merge keeps existing events, replace clears them first."
+      selector:
+        select:
+          options:
+            - merge
+            - replace
+
+export_events:
+  name: Export events
+  description: Export all events as a CSV or JSON string.
+  fields:
+    format:
+      required: false
+      default: json
+      selector:
+        select:
+          options:
+            - csv
+            - json
