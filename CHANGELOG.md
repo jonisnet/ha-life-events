@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.4 — unreleased
+## 0.0.2-beta.5 — unreleased
 
 ### Fixed
 - **Important:** the device/entity-grouping fix from 0.0.2-beta.1 could
@@ -23,7 +23,13 @@ are cut until noted otherwise.
   integration's domain, which still produces a config-entry-bound
   `EntityPlatform` (so device/entity registry linkage works) without
   hitting the reentrancy guard. `Platform.CALENDAR` still forwards
-  normally, since "calendar" isn't the integration's own domain.
+  normally, since "calendar" isn't the integration's own domain. This also
+  caught a second, smaller mistake in `tests/test_init.py` itself: it
+  asserted entity registry entries disappear on `async_unload`, but that's
+  not real HA behavior - unloading only removes entity *state*, registry
+  entries (entity_id, area, customizations) deliberately survive until the
+  entry is fully *removed*. Test now checks `hass.states.get(...) is None`
+  instead.
 - The Manage card's search box and month filter had the same "wipes on
   interaction" bug as the earlier typing fixes, just in a spot those fixes
   didn't cover: they live inline in the always-visible panel body, not

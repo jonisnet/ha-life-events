@@ -98,8 +98,16 @@ async def test_unload_entry_removes_all_entities(hass: HomeAssistant) -> None:
     )
     await hass.async_block_till_done()
 
+    ent_reg = er.async_get(hass)
+    entity_ids = [e.entity_id for e in er.async_entries_for_config_entry(ent_reg, entry.entry_id)]
+    assert entity_ids  # sanity check: calendar + the event just added
+
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
 
-    ent_reg = er.async_get(hass)
-    assert er.async_entries_for_config_entry(ent_reg, entry.entry_id) == []
+    # Unloading removes entity *state* but deliberately keeps entity
+    # *registry* entries around (that's what preserves entity_id/area/
+    # customizations across a reload) - registry entries only disappear on
+    # full entry removal (hass.config_entries.async_remove), not unload.
+    for entity_id in entity_ids:
+        assert hass.states.get(entity_id) is None
