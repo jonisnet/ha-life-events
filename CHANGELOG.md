@@ -3,7 +3,35 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.1 — unreleased
+## 0.0.2-beta.2 — unreleased
+
+### Fixed
+- The Manage card's search box and month filter had the same "wipes on
+  interaction" bug as the earlier typing fixes, just in a spot those fixes
+  didn't cover: they live inline in the always-visible panel body, not
+  inside a modal, so `_suppressRender` (which only guards the modal-open
+  states) never protected them from a full re-render on every incoming
+  `hass` tick. Fixed by overriding `get hass()`/`set hass()` directly on
+  `LifeEventsManageCard`: after the first render, ordinary `hass` ticks now
+  go through the existing targeted `_renderList()` (which only touches
+  `#le-list`) instead of a full `_render()`, unless a modal actually is
+  open.
+- CI for `tests/test_init.py` (added in 0.0.2-beta.1 for the device/entity
+  grouping fix) kept failing even after making the test file's own
+  fixture `async def`. The real cause: `pytest-homeassistant-custom-component`
+  ships its own async `enable_custom_integrations`/`hass` fixtures, and
+  pytest-asyncio only awaits async fixtures automatically under
+  `asyncio_mode = auto` - this repo's `setup.cfg` never set it, so under
+  the default strict mode those fixtures landed un-awaited
+  (`AttributeError: 'async_generator' object has no attribute 'data'`).
+  Added `asyncio_mode = auto` under `[tool:pytest]`.
+
+### Changed
+- The 🗑️ delete button no longer sits in the Manage card's list rows -
+  it's now inside the edit popup only, next to Opslaan/Annuleren, so
+  deleting requires opening an item first.
+
+## 0.0.2-beta.1
 
 ### Fixed
 - The logo added in 0.0.1 never actually showed up anywhere in HA

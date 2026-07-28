@@ -19,7 +19,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.1 loaded");
+  console.info("Life Events cards: v0.0.2-beta.2 loaded");
 
   const DOMAIN = "life_events";
 
@@ -564,6 +564,28 @@
       this._monthFilter = "";
     }
 
+    // Overrides the base class's hass setter. That one calls a full
+    // _render() on every hass update, which is fine for the Upcoming/Month
+    // cards (no inputs), but this card's search box and month filter live
+    // inline in the card body (not just inside a modal), so they'd lose
+    // focus on every hass tick the same way the add/edit form used to.
+    // After the first render, route hass updates through the targeted
+    // _renderList() instead - same reasoning as _suppressRender, just
+    // covering the always-visible filter bar too, not only the modals.
+    get hass() {
+      return this._hass;
+    }
+
+    set hass(hass) {
+      const firstRender = !this._hass;
+      this._hass = hass;
+      if (firstRender) {
+        this._render();
+      } else if (!this._suppressRender) {
+        this._renderList();
+      }
+    }
+
     _modalWrap(title, bodyHtml, closeAction) {
       return css`
         <div class="bd-modal-backdrop">
@@ -605,7 +627,6 @@
                 </div>
                 <div>
                   <button class="bd-icon-btn" data-action="edit" data-id="${e.entity_id.split(".")[1]}">✏️</button>
-                  <button class="bd-icon-btn" data-action="delete" data-id="${e.entity_id.split(".")[1]}">🗑️</button>
                 </div>
               </div>
             `
@@ -632,12 +653,6 @@
           this._editingId = btn.dataset.id;
           this._formOpen = true;
           this._render();
-        })
-      );
-      list.querySelectorAll('[data-action="delete"]').forEach((btn) =>
-        btn.addEventListener("click", async () => {
-          if (!confirm("Deze gebeurtenis verwijderen?")) return;
-          await callService(this._hass, "delete_event", { event_id: btn.dataset.id });
         })
       );
     }
@@ -704,6 +719,7 @@
           <div class="bd-actions">
             <button class="bd-btn" data-action="save">${editing ? "Opslaan" : "Toevoegen"}</button>
             <button class="bd-btn secondary" data-action="cancel">Annuleren</button>
+            ${editing ? `<button class="bd-btn danger" data-action="delete" data-id="${this._editingId}">Verwijderen</button>` : ""}
           </div>
         </div>
       `;
@@ -792,6 +808,15 @@
       );
       const saveBtn = root.querySelector('[data-action="save"]');
       if (saveBtn) saveBtn.addEventListener("click", () => this._save());
+      const deleteBtn = root.querySelector('[data-action="delete"]');
+      if (deleteBtn)
+        deleteBtn.addEventListener("click", async () => {
+          if (!confirm("Deze gebeurtenis verwijderen?")) return;
+          await callService(this._hass, "delete_event", { event_id: deleteBtn.dataset.id });
+          this._formOpen = false;
+          this._editingId = null;
+          this._render();
+        });
 
       const ioBtn = root.querySelector('[data-action="io"]');
       if (ioBtn)
