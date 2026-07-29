@@ -65,8 +65,14 @@ async def test_entities_are_tied_to_the_config_entry(hass: HomeAssistant) -> Non
     )
 
 
-async def test_calendar_and_events_share_one_device(hass: HomeAssistant) -> None:
-    """Both entity kinds declare the same device identifier; there should be exactly one device."""
+async def test_only_calendar_has_a_device(hass: HomeAssistant) -> None:
+    """Event entities deliberately have no device_info (see entity.py) - only the calendar does.
+
+    Sharing one device across event entities used to prefix every person's
+    friendly_name with the device name under HA's "legacy naming" rules
+    (has_entity_name=False entities linked to a device), regardless of
+    has_entity_name - not worth it for what was only a visual nicety.
+    """
     entry = await _setup_entry(hass)
 
     await hass.services.async_call(
@@ -84,7 +90,10 @@ async def test_calendar_and_events_share_one_device(hass: HomeAssistant) -> None
     ent_reg = er.async_get(hass)
     entries_for_config_entry = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
     assert len(entries_for_config_entry) >= 2  # calendar + at least the one event just added
-    assert all(e.device_id == devices[0].id for e in entries_for_config_entry)
+
+    by_domain = {e.entity_id.split(".", 1)[0]: e for e in entries_for_config_entry}
+    assert by_domain["calendar"].device_id == devices[0].id
+    assert by_domain[DOMAIN].device_id is None
 
 
 async def test_unload_entry_marks_entities_unavailable(hass: HomeAssistant) -> None:

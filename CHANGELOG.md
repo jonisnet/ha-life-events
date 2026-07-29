@@ -3,6 +3,30 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.4 — unreleased
+
+### Fixed
+- **Important:** the "Life Events {naam}" prefix on every person's
+  friendly_name (reported after the device-grouping fix started actually
+  working) was NOT fixed by the `_attr_has_entity_name = False` change
+  shipped in 0.0.2-beta.2, and setting that explicitly never had a chance
+  to work. Root cause, found by reading the actual HA 2026.7.4 source (the
+  version the report came from) rather than the older 2024.6.0b6 this repo's
+  CI happens to pin: HA's "legacy naming" friendly-name computation
+  (`homeassistant/helpers/entity_registry.py::_async_get_full_entity_name`,
+  used whenever `entry.name` has no manual override) always joins
+  `device name + entity name` for any entity linked to a device -
+  `has_entity_name` only affects whether HA *tries* to strip a
+  redundant/already-matching prefix from the raw name, not whether the
+  device name gets added in the first place. Sharing one "Life Events"
+  device across every person entity was only ever a visual nicety on top
+  of the actual fix (being tied to the config entry via `EntityComponent`,
+  which is what makes entities show up under Settings → Devices & services
+  at all) - not worth this side effect for 100+ entities. `EventEntity` no
+  longer declares `device_info`; the calendar entity keeps its own device
+  since it's a single, uniquely-named entity that displays cleanly either
+  way.
+
 ## 0.0.2-beta.3
 
 ### Added
