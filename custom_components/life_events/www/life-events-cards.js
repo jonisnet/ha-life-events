@@ -19,7 +19,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.5 loaded");
+  console.info("Life Events cards: v0.0.2-beta.6 loaded");
 
   const DOMAIN = "life_events";
 
@@ -309,6 +309,234 @@
       .join("");
   }
 
+  // Renders one input-pair row per custom attribute. Purely DOM-driven
+  // (like the import/export textarea) rather than tracked in card state -
+  // add/remove-row handlers manipulate #f-attrs-rows directly and
+  // saveEventForm() reads the final rows straight from the DOM, so nothing
+  // here ever triggers a full _render() that would wipe in-progress typing.
+  function attrRowsHtml(attrs) {
+    return Object.entries(attrs || {})
+      .map(
+        ([k, v]) => css`
+          <div class="bd-attr-row">
+            <input class="f-attr-key" placeholder="Naam (bv. relatie, geslacht)" value="${escapeAttr(k)}" />
+            <input class="f-attr-value" placeholder="Waarde" value="${escapeAttr(v)}" />
+            <button type="button" class="bd-icon-btn" data-action="remove-attr">✕</button>
+          </div>
+        `
+      )
+      .join("");
+  }
+
+  function bindAttrRows(root) {
+    const container = root.querySelector("#f-attrs-rows");
+    if (!container) return;
+    container.querySelectorAll('[data-action="remove-attr"]').forEach((btn) =>
+      btn.addEventListener("click", () => btn.closest(".bd-attr-row").remove())
+    );
+  }
+
+  // Shared add/edit form body - used by the Manage card's popup and, when
+  // "Bewerken" is clicked, by the Upcoming/Month cards' details popup too.
+  // `editing` is null when adding a new event.
+  function renderEventFormBody(editing, editingId, confirmDelete) {
+    const nameParts = splitName(editing ? editing.name : "");
+    return css`
+      <div class="bd-form">
+        <label>Voornaam</label>
+        <input id="f-firstname" value="${escapeAttr(nameParts.first)}" />
+        <label>Achternaam (optioneel)</label>
+        <input id="f-lastname" value="${escapeAttr(nameParts.last)}" />
+        <label>Type</label>
+        <select id="f-type">
+          ${["birthday", "anniversary", "deceased"]
+            .map(
+              (t) =>
+                `<option value="${t}" ${editing && editing.eventType === t ? "selected" : ""}>${EVENT_TYPE_LABELS[t]}</option>`
+            )
+            .join("")}
+        </select>
+        <label>Datum</label>
+        <input id="f-date" type="date" value="${editing ? editing.date : ""}" />
+        <label>Datum van overlijden (alleen bij type 'Overleden')</label>
+        <input id="f-date-death" type="date" value="${editing && editing.dateOfDeath ? editing.dateOfDeath : ""}" />
+        <label>Icoon (optioneel, bv. mdi:cake)</label>
+        <input id="f-icon" value="${editing && editing.icon ? editing.icon : ""}" />
+        <label>Telefoonnummer (optioneel, alleen zinvol bij 'Verjaardag'/'Jubileum')</label>
+        <div style="display:flex; gap:8px;">
+          ${(() => {
+            const phone = fromE164(editing ? editing.phoneNumber : "");
+            return css`
+              <select id="f-phone-country" style="flex:0 0 auto; width:auto;">
+                ${COUNTRY_CODES.map(
+                  (c) =>
+                    `<option value="${c[0]}" ${c[0] === phone.iso2 ? "selected" : ""}>${c[2]} (+${c[1]})</option>`
+                ).join("")}
+              </select>
+              <input id="f-phone-local" style="flex:1;" placeholder="0612345678" value="${phone.local}" />
+            `;
+          })()}
+        </div>
+        <label>Aangepaste attributen (optioneel, bv. relatie, geslacht - zelf te bepalen)</label>
+        <div id="f-attrs-rows">${attrRowsHtml(editing ? editing.attributes : {})}</div>
+        <button type="button" class="bd-btn secondary" data-action="add-attr">+ Attribuut toevoegen</button>
+        ${
+          editing && confirmDelete
+            ? css`
+              <div class="bd-confirm">
+                <span>Deze gebeurtenis verwijderen?</span>
+                <div class="bd-actions">
+                  <button class="bd-btn danger" data-action="delete-confirm" data-id="${editingId}">Ja, verwijderen</button>
+                  <button class="bd-btn secondary" data-action="delete-cancel">Annuleren</button>
+                </div>
+              </div>
+            `
+            : css`
+              <div class="bd-actions">
+                <button class="bd-btn" data-action="save">${editing ? "Opslaan" : "Toevoegen"}</button>
+                <button class="bd-btn secondary" data-action="cancel">Annuleren</button>
+                ${editing ? `<button class="bd-btn danger" data-action="delete" data-id="${editingId}">Verwijderen</button>` : ""}
+              </div>
+            `
+        }
+      </div>
+    `;
+  }
+
+  // Reads the form fields from the DOM and performs the add_event/
+  // update_event service call. Returns { ok: true } or
+  // { ok: false, message } for the caller to display.
+  async function saveEventForm(root, hass, editingId) {
+    const firstName = root.querySelector("#f-firstname").value.trim();
+    const lastName = root.querySelector("#f-lastname").value.trim();
+    // Kept as one combined name everywhere except this form (storage,
+    // entity naming/slugs, search, CSV/JSON export, ...) - only input/
+    // editing is split into two fields for convenience (e.g. someone
+    // changing their surname after marriage).
+    const name = lastName ? `${firstName} ${lastName}` : firstName;
+    const eventType = root.querySelector("#f-type").value;
+    const dateVal = root.querySelector("#f-date").value;
+    const dateOfDeath = root.querySelector("#f-date-death").value;
+    const icon = root.querySelector("#f-icon").value.trim();
+    const phoneCountry = root.querySelector("#f-phone-country").value;
+    const phoneLocal = root.querySelector("#f-phone-local").value.trim();
+
+    if (!firstName || !dateVal) {
+      return { ok: false, message: "Voornaam en datum zijn verplicht." };
+    }
+
+    const data = { name, event_type: eventType, date: dateVal };
+    if (icon) data.icon = icon;
+    if (eventType === "deceased" && dateOfDeath) data.date_of_death = dateOfDeath;
+    // Only meaningful for birthday/anniversary; clears any previously set
+    // number if the type was switched to deceased or the field was emptied.
+    data.phone_number = PHONE_EVENT_TYPES.includes(eventType) && phoneLocal ? toE164(phoneLocal, phoneCountry) : "";
+    // Always included (even {}), so removing every row actually clears
+    // previously stored attributes - update_event replaces this field
+    // wholesale rather than merging it key by key (see manager.py).
+    const attributes = {};
+    root.querySelectorAll("#f-attrs-rows .bd-attr-row").forEach((row) => {
+      const key = row.querySelector(".f-attr-key").value.trim();
+      const value = row.querySelector(".f-attr-value").value.trim();
+      if (key) attributes[key] = value;
+    });
+    data.attributes = attributes;
+
+    if (editingId) {
+      await callService(hass, "update_event", { event_id: editingId, ...data });
+    } else {
+      await callService(hass, "add_event", data);
+    }
+    return { ok: true };
+  }
+
+  // Binds every control inside renderEventFormBody()'s markup. `ctx`:
+  //   hass, editingId
+  //   onSave(result)       - result is { ok, message? } from saveEventForm()
+  //   onCancel()
+  //   onDeleteRequest()    - "Verwijderen" clicked, show the confirm step
+  //   onDeleteCancel()
+  //   onDeleteConfirm()    - delete_event already called, entity is gone
+  function bindEventFormEvents(root, ctx) {
+    root.querySelectorAll('[data-action="cancel"]').forEach((btn) => btn.addEventListener("click", ctx.onCancel));
+    const saveBtn = root.querySelector('[data-action="save"]');
+    if (saveBtn)
+      saveBtn.addEventListener("click", async () => {
+        const result = await saveEventForm(root, ctx.hass, ctx.editingId);
+        ctx.onSave(result);
+      });
+    // Delete is a two-step confirm rendered inline in the popup, not the
+    // browser's native confirm() (looks out of place in the Companion
+    // app / kiosk dashboards and isn't themed like the rest of the UI).
+    const deleteBtn = root.querySelector('[data-action="delete"]');
+    if (deleteBtn) deleteBtn.addEventListener("click", ctx.onDeleteRequest);
+    const deleteCancelBtn = root.querySelector('[data-action="delete-cancel"]');
+    if (deleteCancelBtn) deleteCancelBtn.addEventListener("click", ctx.onDeleteCancel);
+    const deleteConfirmBtn = root.querySelector('[data-action="delete-confirm"]');
+    if (deleteConfirmBtn)
+      deleteConfirmBtn.addEventListener("click", async () => {
+        await callService(ctx.hass, "delete_event", { event_id: deleteConfirmBtn.dataset.id });
+        ctx.onDeleteConfirm();
+      });
+
+    bindAttrRows(root);
+    const addAttrBtn = root.querySelector('[data-action="add-attr"]');
+    if (addAttrBtn)
+      addAttrBtn.addEventListener("click", () => {
+        // Direct DOM append, not a full re-render: this popup can be
+        // mid-edit (name/date/etc. typed but not saved yet), and rebuilding
+        // would wipe all of that the same way the earlier typing bugs did.
+        const container = root.querySelector("#f-attrs-rows");
+        if (!container) return;
+        container.insertAdjacentHTML("beforeend", attrRowsHtml({ "": "" }));
+        const newRow = container.lastElementChild;
+        const removeBtn = newRow.querySelector('[data-action="remove-attr"]');
+        if (removeBtn) removeBtn.addEventListener("click", () => newRow.remove());
+      });
+  }
+
+  // Shared by the Upcoming and Month cards: a details popup that can flip
+  // into the same edit form the Manage card uses, via a "Bewerken" button.
+  // `detailsEvent` is the resolved event object (or null - no popup); the
+  // returned HTML already includes the modal wrapper.
+  function renderDetailsOrEditModal(detailsEvent, formMode, confirmDelete) {
+    if (!detailsEvent) return "";
+    const editingId = detailsEvent.entity_id.split(".")[1];
+    const title = css`
+      <ha-icon icon="${detailsEvent.icon || EVENT_TYPE_ICONS[detailsEvent.eventType]}"></ha-icon>
+      <span>${escapeAttr(detailsEvent.name)}</span>
+    `;
+    const body = formMode
+      ? renderEventFormBody(detailsEvent, editingId, confirmDelete)
+      : css`
+          ${renderDetailsBody(detailsEvent)}
+          <button type="button" class="bd-btn bd-details-edit-btn" data-action="start-edit">
+            <ha-icon icon="mdi:pencil"></ha-icon> Bewerken
+          </button>
+        `;
+    return modalWrap(title, body, formMode ? "cancel" : "close-details");
+  }
+
+  // ctx: hass, detailsId, formMode, onStartEdit(), onClose(),
+  // onSave(result), onCancelEdit(), onDeleteRequest(), onDeleteCancel(),
+  // onDeleteConfirm()
+  function bindDetailsOrEditModal(root, ctx) {
+    root.querySelectorAll('[data-action="close-details"]').forEach((btn) => btn.addEventListener("click", ctx.onClose));
+    const startEditBtn = root.querySelector('[data-action="start-edit"]');
+    if (startEditBtn) startEditBtn.addEventListener("click", ctx.onStartEdit);
+    if (ctx.formMode) {
+      bindEventFormEvents(root, {
+        hass: ctx.hass,
+        editingId: ctx.detailsId,
+        onSave: ctx.onSave,
+        onCancel: ctx.onCancelEdit,
+        onDeleteRequest: ctx.onDeleteRequest,
+        onDeleteCancel: ctx.onDeleteCancel,
+        onDeleteConfirm: ctx.onDeleteConfirm,
+      });
+    }
+  }
+
   async function callService(hass, service, data, wantsResponse) {
     if (wantsResponse) {
       const result = await hass.connection.sendMessagePromise({
@@ -458,10 +686,11 @@
             .bd-row:last-child { border-bottom: none; }
             .bd-row[data-action], table.bd-table tr[data-action] { cursor: pointer; }
             .bd-row[data-action]:hover, table.bd-table tr[data-action]:hover { background: var(--secondary-background-color); }
-            .bd-details-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--divider-color); }
-            .bd-details-row:last-child { border-bottom: none; }
-            .bd-details-label { color: var(--secondary-text-color); font-size: 13px; }
-            .bd-details-value { font-weight: 500; text-align: right; }
+            .bd-details-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 8px; }
+            .bd-details-row:nth-child(odd) { background: var(--secondary-background-color); }
+            .bd-details-label { color: var(--secondary-text-color); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+            .bd-details-value { font-weight: 600; text-align: right; }
+            .bd-details-edit-btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 16px; }
             .bd-left { display: flex; align-items: center; gap: 12px; }
             .bd-name { font-weight: 500; }
             .bd-secondary { font-size: 12px; color: var(--secondary-text-color); }
@@ -482,8 +711,9 @@
             .bd-filters input { flex: 1; min-width: 120px; }
             .bd-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px; box-sizing: border-box; }
             .bd-modal { background: var(--card-background-color); border-radius: 12px; max-width: 480px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
-            .bd-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--divider-color); flex-shrink: 0; }
-            .bd-modal-title { font-weight: 600; }
+            .bd-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--divider-color); flex-shrink: 0; background: var(--secondary-background-color); }
+            .bd-modal-title { font-weight: 700; font-size: 17px; display: flex; align-items: center; gap: 10px; }
+            .bd-modal-title ha-icon { color: var(--primary-color); }
             .bd-modal-body { padding: 16px; overflow-y: auto; }
             button.bd-btn { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; background: var(--primary-color); color: var(--text-primary-color, #fff); font: inherit; }
             button.bd-btn.secondary { background: var(--secondary-background-color); color: var(--primary-text-color); }
@@ -509,6 +739,8 @@
     constructor() {
       super();
       this._detailsId = null;
+      this._formMode = false;
+      this._confirmDelete = false;
       this._countdownInterval = null;
     }
 
@@ -555,21 +787,55 @@
 
       this._shell(css`
         ${rows}
-        ${detailsEvent ? modalWrap(detailsEvent.name, renderDetailsBody(detailsEvent), "close-details") : ""}
+        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete)}
       `);
 
       this.shadowRoot.querySelectorAll('[data-action="details"]').forEach((row) =>
         row.addEventListener("click", () => {
           this._detailsId = row.dataset.id;
+          this._formMode = false;
           this._render();
         })
       );
-      this.shadowRoot.querySelectorAll('[data-action="close-details"]').forEach((btn) =>
-        btn.addEventListener("click", () => {
+      bindDetailsOrEditModal(this.shadowRoot, {
+        hass: this._hass,
+        detailsId: this._detailsId,
+        formMode: this._formMode,
+        onStartEdit: () => {
+          this._formMode = true;
+          this._render();
+        },
+        onClose: () => {
           this._detailsId = null;
+          this._formMode = false;
+          this._confirmDelete = false;
           this._render();
-        })
-      );
+        },
+        onSave: (result) => {
+          if (!result.ok) return; // no dedicated status line here; field values are kept as typed
+          this._formMode = false;
+          this._render();
+        },
+        onCancelEdit: () => {
+          this._formMode = false;
+          this._confirmDelete = false;
+          this._render();
+        },
+        onDeleteRequest: () => {
+          this._confirmDelete = true;
+          this._render();
+        },
+        onDeleteCancel: () => {
+          this._confirmDelete = false;
+          this._render();
+        },
+        onDeleteConfirm: () => {
+          this._detailsId = null;
+          this._formMode = false;
+          this._confirmDelete = false;
+          this._render();
+        },
+      });
       bindModalBackdrops(this.shadowRoot);
 
       // _shell() replaces the whole shadow DOM (including any previous
@@ -644,6 +910,8 @@
       super();
       this._selectedMonth = new Date().getMonth() + 1;
       this._detailsId = null;
+      this._formMode = false;
+      this._confirmDelete = false;
     }
 
     _render() {
@@ -689,7 +957,7 @@
       this._shell(css`
         <div class="bd-months">${buttons}</div>
         ${table}
-        ${detailsEvent ? modalWrap(detailsEvent.name, renderDetailsBody(detailsEvent), "close-details") : ""}
+        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete)}
       `);
 
       this.shadowRoot.querySelectorAll(".bd-month-btn").forEach((btn) => {
@@ -701,15 +969,49 @@
       this.shadowRoot.querySelectorAll('[data-action="details"]').forEach((row) =>
         row.addEventListener("click", () => {
           this._detailsId = row.dataset.id;
+          this._formMode = false;
           this._render();
         })
       );
-      this.shadowRoot.querySelectorAll('[data-action="close-details"]').forEach((btn) =>
-        btn.addEventListener("click", () => {
+      bindDetailsOrEditModal(this.shadowRoot, {
+        hass: this._hass,
+        detailsId: this._detailsId,
+        formMode: this._formMode,
+        onStartEdit: () => {
+          this._formMode = true;
+          this._render();
+        },
+        onClose: () => {
           this._detailsId = null;
+          this._formMode = false;
+          this._confirmDelete = false;
           this._render();
-        })
-      );
+        },
+        onSave: (result) => {
+          if (!result.ok) return;
+          this._formMode = false;
+          this._render();
+        },
+        onCancelEdit: () => {
+          this._formMode = false;
+          this._confirmDelete = false;
+          this._render();
+        },
+        onDeleteRequest: () => {
+          this._confirmDelete = true;
+          this._render();
+        },
+        onDeleteCancel: () => {
+          this._confirmDelete = false;
+          this._render();
+        },
+        onDeleteConfirm: () => {
+          this._detailsId = null;
+          this._formMode = false;
+          this._confirmDelete = false;
+          this._render();
+        },
+      });
       bindModalBackdrops(this.shadowRoot);
     }
 
@@ -792,34 +1094,6 @@
       } else if (!this._suppressRender) {
         this._renderList();
       }
-    }
-
-    // Renders one input-pair row per custom attribute. Purely DOM-driven
-    // (like the import/export textarea) rather than tracked in card state -
-    // add/remove-row handlers manipulate #f-attrs-rows directly and _save()
-    // reads the final rows straight from the DOM, so nothing here ever
-    // triggers a full _render() that would wipe in-progress typing.
-    _attrRowsHtml(attrs) {
-      const entries = Object.entries(attrs || {});
-      return entries
-        .map(
-          ([k, v]) => css`
-            <div class="bd-attr-row">
-              <input class="f-attr-key" placeholder="Naam (bv. relatie, geslacht)" value="${escapeAttr(k)}" />
-              <input class="f-attr-value" placeholder="Waarde" value="${escapeAttr(v)}" />
-              <button type="button" class="bd-icon-btn" data-action="remove-attr">✕</button>
-            </div>
-          `
-        )
-        .join("");
-    }
-
-    _bindAttrRows() {
-      const container = this.shadowRoot.querySelector("#f-attrs-rows");
-      if (!container) return;
-      container.querySelectorAll('[data-action="remove-attr"]').forEach((btn) =>
-        btn.addEventListener("click", () => btn.closest(".bd-attr-row").remove())
-      );
     }
 
     // Base list for this card (config's event_types filter only). Used for
@@ -940,68 +1214,7 @@
 
       const editing = this._editingId ? this._baseEvents().find((e) => e.entity_id === `${DOMAIN}.${this._editingId}`) : null;
 
-      const nameParts = splitName(editing ? editing.name : "");
-
-      const formBody = css`
-        <div class="bd-form">
-          <label>Voornaam</label>
-          <input id="f-firstname" value="${escapeAttr(nameParts.first)}" />
-          <label>Achternaam (optioneel)</label>
-          <input id="f-lastname" value="${escapeAttr(nameParts.last)}" />
-          <label>Type</label>
-          <select id="f-type">
-            ${["birthday", "anniversary", "deceased"]
-              .map(
-                (t) =>
-                  `<option value="${t}" ${editing && editing.eventType === t ? "selected" : ""}>${EVENT_TYPE_LABELS[t]}</option>`
-              )
-              .join("")}
-          </select>
-          <label>Datum</label>
-          <input id="f-date" type="date" value="${editing ? editing.date : ""}" />
-          <label>Datum van overlijden (alleen bij type 'Overleden')</label>
-          <input id="f-date-death" type="date" value="${editing && editing.dateOfDeath ? editing.dateOfDeath : ""}" />
-          <label>Icoon (optioneel, bv. mdi:cake)</label>
-          <input id="f-icon" value="${editing && editing.icon ? editing.icon : ""}" />
-          <label>Telefoonnummer (optioneel, alleen zinvol bij 'Verjaardag'/'Jubileum')</label>
-          <div style="display:flex; gap:8px;">
-            ${(() => {
-              const phone = fromE164(editing ? editing.phoneNumber : "");
-              return css`
-                <select id="f-phone-country" style="flex:0 0 auto; width:auto;">
-                  ${COUNTRY_CODES.map(
-                    (c) =>
-                      `<option value="${c[0]}" ${c[0] === phone.iso2 ? "selected" : ""}>${c[2]} (+${c[1]})</option>`
-                  ).join("")}
-                </select>
-                <input id="f-phone-local" style="flex:1;" placeholder="0612345678" value="${phone.local}" />
-              `;
-            })()}
-          </div>
-          <label>Aangepaste attributen (optioneel, bv. relatie, geslacht - zelf te bepalen)</label>
-          <div id="f-attrs-rows">${this._attrRowsHtml(editing ? editing.attributes : {})}</div>
-          <button type="button" class="bd-btn secondary" data-action="add-attr">+ Attribuut toevoegen</button>
-          ${
-            editing && this._confirmDelete
-              ? css`
-                <div class="bd-confirm">
-                  <span>Deze gebeurtenis verwijderen?</span>
-                  <div class="bd-actions">
-                    <button class="bd-btn danger" data-action="delete-confirm" data-id="${this._editingId}">Ja, verwijderen</button>
-                    <button class="bd-btn secondary" data-action="delete-cancel">Annuleren</button>
-                  </div>
-                </div>
-              `
-              : css`
-                <div class="bd-actions">
-                  <button class="bd-btn" data-action="save">${editing ? "Opslaan" : "Toevoegen"}</button>
-                  <button class="bd-btn secondary" data-action="cancel">Annuleren</button>
-                  ${editing ? `<button class="bd-btn danger" data-action="delete" data-id="${this._editingId}">Verwijderen</button>` : ""}
-                </div>
-              `
-          }
-        </div>
-      `;
+      const formBody = renderEventFormBody(editing, this._editingId, this._confirmDelete);
 
       const importExportBody = css`
         <div class="bd-form">
@@ -1105,58 +1318,46 @@
           this._confirmDelete = false;
           this._render();
         });
-      // querySelectorAll: the modal header's close (X) button reuses the
-      // same data-action as the body's own Annuleren/Sluiten button, so
-      // there are two matching elements to bind whenever a modal is open.
-      root.querySelectorAll('[data-action="cancel"]').forEach((btn) =>
-        btn.addEventListener("click", () => {
+      // querySelectorAll inside bindEventFormEvents: the modal header's
+      // close (X) button reuses the same data-action="cancel" as the
+      // form's own Annuleren button, so there are two matching elements to
+      // bind whenever the form modal is open. No-ops when it isn't (the
+      // form's own root won't have any of these controls to find).
+      bindEventFormEvents(root, {
+        hass: this._hass,
+        editingId: this._editingId,
+        onSave: (result) => {
+          if (!result.ok) {
+            this._status = result.message;
+            this._render();
+            return;
+          }
+          this._formOpen = false;
+          this._editingId = null;
+          this._status = "Opgeslagen.";
+          this._render();
+        },
+        onCancel: () => {
           this._formOpen = false;
           this._editingId = null;
           this._confirmDelete = false;
           this._render();
-        })
-      );
-      const saveBtn = root.querySelector('[data-action="save"]');
-      if (saveBtn) saveBtn.addEventListener("click", () => this._save());
-      // Delete is a two-step confirm rendered inline in the popup, not the
-      // browser's native confirm() (looks out of place in the Companion
-      // app / kiosk dashboards and isn't themed like the rest of the UI).
-      const deleteBtn = root.querySelector('[data-action="delete"]');
-      if (deleteBtn)
-        deleteBtn.addEventListener("click", () => {
+        },
+        onDeleteRequest: () => {
           this._confirmDelete = true;
           this._render();
-        });
-      const deleteCancelBtn = root.querySelector('[data-action="delete-cancel"]');
-      if (deleteCancelBtn)
-        deleteCancelBtn.addEventListener("click", () => {
+        },
+        onDeleteCancel: () => {
           this._confirmDelete = false;
           this._render();
-        });
-      const deleteConfirmBtn = root.querySelector('[data-action="delete-confirm"]');
-      if (deleteConfirmBtn)
-        deleteConfirmBtn.addEventListener("click", async () => {
-          await callService(this._hass, "delete_event", { event_id: deleteConfirmBtn.dataset.id });
+        },
+        onDeleteConfirm: () => {
           this._formOpen = false;
           this._editingId = null;
           this._confirmDelete = false;
           this._render();
-        });
-
-      this._bindAttrRows();
-      const addAttrBtn = root.querySelector('[data-action="add-attr"]');
-      if (addAttrBtn)
-        addAttrBtn.addEventListener("click", () => {
-          // Direct DOM append, not _render(): this popup can be mid-edit
-          // (name/date/etc. typed but not saved yet), and a full re-render
-          // would wipe all of that the same way the earlier typing bugs did.
-          const container = root.querySelector("#f-attrs-rows");
-          if (!container) return;
-          container.insertAdjacentHTML("beforeend", this._attrRowsHtml({ "": "" }));
-          const newRow = container.lastElementChild;
-          const removeBtn = newRow.querySelector('[data-action="remove-attr"]');
-          if (removeBtn) removeBtn.addEventListener("click", () => newRow.remove());
-        });
+        },
+      });
 
       const ioBtn = root.querySelector('[data-action="io"]');
       if (ioBtn)
@@ -1255,56 +1456,6 @@
       reader.readAsText(file);
     }
 
-    async _save() {
-      const root = this.shadowRoot;
-      const firstName = root.querySelector("#f-firstname").value.trim();
-      const lastName = root.querySelector("#f-lastname").value.trim();
-      // Kept as one combined name everywhere except this form (storage,
-      // entity naming/slugs, search, CSV/JSON export, ...) - only input/
-      // editing is split into two fields for convenience (e.g. someone
-      // changing their surname after marriage).
-      const name = lastName ? `${firstName} ${lastName}` : firstName;
-      const eventType = root.querySelector("#f-type").value;
-      const dateVal = root.querySelector("#f-date").value;
-      const dateOfDeath = root.querySelector("#f-date-death").value;
-      const icon = root.querySelector("#f-icon").value.trim();
-      const phoneCountry = root.querySelector("#f-phone-country").value;
-      const phoneLocal = root.querySelector("#f-phone-local").value.trim();
-
-      if (!firstName || !dateVal) {
-        this._status = "Voornaam en datum zijn verplicht.";
-        this._render();
-        return;
-      }
-
-      const data = { name, event_type: eventType, date: dateVal };
-      if (icon) data.icon = icon;
-      if (eventType === "deceased" && dateOfDeath) data.date_of_death = dateOfDeath;
-      // Only meaningful for birthday/anniversary; clears any previously set
-      // number if the type was switched to deceased or the field was emptied.
-      data.phone_number = PHONE_EVENT_TYPES.includes(eventType) && phoneLocal ? toE164(phoneLocal, phoneCountry) : "";
-      // Always included (even {}), so removing every row actually clears
-      // previously stored attributes - update_event replaces this field
-      // wholesale rather than merging it key by key (see manager.py).
-      const attributes = {};
-      root.querySelectorAll("#f-attrs-rows .bd-attr-row").forEach((row) => {
-        const key = row.querySelector(".f-attr-key").value.trim();
-        const value = row.querySelector(".f-attr-value").value.trim();
-        if (key) attributes[key] = value;
-      });
-      data.attributes = attributes;
-
-      if (this._editingId) {
-        await callService(this._hass, "update_event", { event_id: this._editingId, ...data });
-      } else {
-        await callService(this._hass, "add_event", data);
-      }
-
-      this._formOpen = false;
-      this._editingId = null;
-      this._status = "Opgeslagen.";
-      this._render();
-    }
 
     async _export(download) {
       // Same reasoning as _loadFile(): update the status text directly

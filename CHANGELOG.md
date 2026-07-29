@@ -3,6 +3,21 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.6 — unreleased
+
+### Added
+- The Upcoming and Month cards' read-only details popup now has a
+  **"Bewerken"** button that switches the same popup into the full edit
+  form (name, date, phone, custom attributes, delete) - previously only
+  the Manage card could edit. Shares the exact same form/save/delete logic
+  as the Manage card (extracted into shared functions, no duplication);
+  "Annuleren" while editing goes back to the read-only view rather than
+  closing the popup.
+
+### Changed
+- Polished the details popup: zebra-striped rows, bolder values, an event
+  icon next to the title, and a highlighted modal header.
+
 ## 0.0.2-beta.5
 
 ### Added
