@@ -3,6 +3,18 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.3 — unreleased
+
+### Added
+- The Upcoming card's top row now shows a live, ticking countdown to the
+  next event ("Nog X dagen Y uur Z min W sec"), updated every second
+  without a full card re-render. Computed client-side from the stored
+  month/day (the backend only ever exposed a whole-day count), mirroring
+  `calendar.py`'s own next-occurrence rollover logic so "today is the day"
+  correctly shows "Vandaag!" immediately instead of a ~365-day countdown
+  to next year (a rollover bug caught by the runtime browser test before
+  shipping, not by eye).
+
 ## 0.0.2-beta.2
 
 ### Fixed

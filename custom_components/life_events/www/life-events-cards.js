@@ -19,7 +19,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.2 loaded");
+  console.info("Life Events cards: v0.0.2-beta.3 loaded");
 
   const DOMAIN = "life_events";
 
@@ -207,6 +207,35 @@
     if (!iso) return "";
     const [y, m, d] = iso.split("-");
     return `${d}-${m}-${y}`;
+  }
+
+  // Client-side only (the backend only exposes a whole-day count as
+  // state): reconstructs the exact next-occurrence midnight from the
+  // stored month/day, mirroring calendar.py's _next_occurrence logic, so
+  // the Upcoming card's top row can show a live to-the-second countdown.
+  function nextOccurrenceDate(iso) {
+    const [, m, d] = iso.split("-").map(Number);
+    const now = new Date();
+    // Date-only comparison for the rollover decision (matching
+    // calendar.py's _next_occurrence: `occurrence < today`, not
+    // `<= now`) - otherwise "today is the day" always incorrectly rolls
+    // over to next year, since midnight-today is virtually always
+    // earlier than the current time-of-day.
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let target = new Date(now.getFullYear(), m - 1, d, 0, 0, 0, 0);
+    if (target < todayMidnight) target = new Date(now.getFullYear() + 1, m - 1, d, 0, 0, 0, 0);
+    return target;
+  }
+
+  function formatCountdown(target) {
+    const diffMs = target - new Date();
+    if (diffMs <= 0) return "Vandaag!";
+    const totalSeconds = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `Nog ${days} dagen ${hours} uur ${minutes} min ${seconds} sec`;
   }
 
   // Splits a stored combined name back into first/last name for the edit
@@ -479,6 +508,14 @@
     constructor() {
       super();
       this._detailsId = null;
+      this._countdownInterval = null;
+    }
+
+    // Timers must not survive the element being removed from the DOM
+    // (dashboard navigation, card deleted from view, ...), or they'd keep
+    // ticking and touching a detached shadow root forever.
+    disconnectedCallback() {
+      if (this._countdownInterval) clearInterval(this._countdownInterval);
     }
 
     _render() {
@@ -491,13 +528,14 @@
       const rows = events.length
         ? events
             .map(
-              (e) => css`
+              (e, i) => css`
               <div class="bd-row" data-action="details" data-id="${e.entity_id.split(".")[1]}">
                 <div class="bd-left">
                   ${this._config.show_icon === false ? "" : `<ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>`}
                   <div>
                     <div class="bd-name">${e.name}</div>
                     <div class="bd-secondary">${formatDate(e.date)} &middot; ${EVENT_TYPE_LABELS[e.eventType] || e.eventType}${e.eventType !== "deceased" && e.age != null ? ` &middot; wordt ${e.age}` : ""}</div>
+                    ${i === 0 ? `<div class="bd-secondary" id="le-countdown"></div>` : ""}
                   </div>
                 </div>
                 <div class="bd-badge">${e.days === 0 ? "Vandaag!" : e.days}</div>
@@ -532,6 +570,22 @@
         })
       );
       bindModalBackdrops(this.shadowRoot);
+
+      // _shell() replaces the whole shadow DOM (including any previous
+      // #le-countdown element), so any earlier interval must be torn down
+      // and a fresh one started against the new element - otherwise every
+      // hass tick (any entity changing state, anywhere in HA) would leak
+      // another interval ticking against a detached node.
+      if (this._countdownInterval) clearInterval(this._countdownInterval);
+      if (events.length) {
+        const target = nextOccurrenceDate(events[0].date);
+        const tick = () => {
+          const el = this.shadowRoot.querySelector("#le-countdown");
+          if (el) el.textContent = formatCountdown(target);
+        };
+        tick();
+        this._countdownInterval = setInterval(tick, 1000);
+      }
     }
 
     static getConfigElement() {
