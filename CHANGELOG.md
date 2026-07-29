@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.6 — unreleased
+## 0.0.2-beta.6
 
 ### Fixed
 - **Important:** the device/entity-grouping fix from 0.0.2-beta.1 could
