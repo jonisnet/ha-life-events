@@ -1,10 +1,33 @@
 """The entity representing a single tracked event."""
 from __future__ import annotations
 
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er, label_registry as lr
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_AGE_AT_NEXT_BIRTHDAY, CONF_DATE_OF_BIRTH, DOMAIN, EVENT_TYPE_DECEASED
+from .const import CONF_AGE_AT_NEXT_BIRTHDAY, CONF_DATE_OF_BIRTH, DOMAIN, DOMAIN_FRIENDLY_NAME, EVENT_TYPE_DECEASED
+
+
+@callback
+def apply_life_events_label(hass: HomeAssistant, entity_id: str) -> None:
+    """Ensure entity_id carries the shared "Life Events" label.
+
+    Entities aren't grouped under a device (see EventEntity's
+    _attr_has_entity_name comment below), so this label is what lets users
+    find/filter every entity belonging to this integration via Settings ->
+    Areas, labels & zones despite that. Only adds the label if missing -
+    never touches any other labels the user may have set themselves.
+    """
+    label_reg = lr.async_get(hass)
+    label = label_reg.async_get_label_by_name(DOMAIN_FRIENDLY_NAME)
+    if label is None:
+        label = label_reg.async_create(DOMAIN_FRIENDLY_NAME, icon="mdi:cake")
+
+    ent_reg = er.async_get(hass)
+    entry = ent_reg.async_get(entity_id)
+    if entry is not None and label.label_id not in entry.labels:
+        ent_reg.async_update_entity(entity_id, labels=entry.labels | {label.label_id})
 
 
 class EventEntity(Entity):
@@ -30,6 +53,12 @@ class EventEntity(Entity):
         self._manager = manager
         self._event_id = event_id
         self.entity_id = f"{DOMAIN}.{event_id}"
+
+    async def async_added_to_hass(self) -> None:
+        # Applied here, not at registration time in manager.py: the entity
+        # registry entry is only guaranteed to exist once this callback
+        # fires.
+        apply_life_events_label(self.hass, self.entity_id)
 
     @property
     def _event(self):

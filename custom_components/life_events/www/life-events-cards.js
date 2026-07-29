@@ -19,7 +19,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.3 loaded");
+  console.info("Life Events cards: v0.0.2-beta.5 loaded");
 
   const DOMAIN = "life_events";
 
@@ -476,6 +476,7 @@
             .bd-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
             .bd-attr-row { display: flex; gap: 8px; margin-bottom: 6px; }
             .bd-attr-row input { flex: 1; min-width: 0; }
+            .bd-confirm { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding: 12px; border-radius: 6px; background: var(--secondary-background-color); }
             .bd-filters { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
             .bd-filters input, .bd-filters select { padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
             .bd-filters input { flex: 1; min-width: 120px; }
@@ -768,6 +769,7 @@
       this._genderFilter = "";
       this._attrFilterKey = "";
       this._attrFilterValue = "";
+      this._confirmDelete = false;
     }
 
     // Overrides the base class's hass setter. That one calls a full
@@ -979,11 +981,25 @@
           <label>Aangepaste attributen (optioneel, bv. relatie, geslacht - zelf te bepalen)</label>
           <div id="f-attrs-rows">${this._attrRowsHtml(editing ? editing.attributes : {})}</div>
           <button type="button" class="bd-btn secondary" data-action="add-attr">+ Attribuut toevoegen</button>
-          <div class="bd-actions">
-            <button class="bd-btn" data-action="save">${editing ? "Opslaan" : "Toevoegen"}</button>
-            <button class="bd-btn secondary" data-action="cancel">Annuleren</button>
-            ${editing ? `<button class="bd-btn danger" data-action="delete" data-id="${this._editingId}">Verwijderen</button>` : ""}
-          </div>
+          ${
+            editing && this._confirmDelete
+              ? css`
+                <div class="bd-confirm">
+                  <span>Deze gebeurtenis verwijderen?</span>
+                  <div class="bd-actions">
+                    <button class="bd-btn danger" data-action="delete-confirm" data-id="${this._editingId}">Ja, verwijderen</button>
+                    <button class="bd-btn secondary" data-action="delete-cancel">Annuleren</button>
+                  </div>
+                </div>
+              `
+              : css`
+                <div class="bd-actions">
+                  <button class="bd-btn" data-action="save">${editing ? "Opslaan" : "Toevoegen"}</button>
+                  <button class="bd-btn secondary" data-action="cancel">Annuleren</button>
+                  ${editing ? `<button class="bd-btn danger" data-action="delete" data-id="${this._editingId}">Verwijderen</button>` : ""}
+                </div>
+              `
+          }
         </div>
       `;
 
@@ -1086,6 +1102,7 @@
         addBtn.addEventListener("click", () => {
           this._editingId = null;
           this._formOpen = true;
+          this._confirmDelete = false;
           this._render();
         });
       // querySelectorAll: the modal header's close (X) button reuses the
@@ -1095,18 +1112,34 @@
         btn.addEventListener("click", () => {
           this._formOpen = false;
           this._editingId = null;
+          this._confirmDelete = false;
           this._render();
         })
       );
       const saveBtn = root.querySelector('[data-action="save"]');
       if (saveBtn) saveBtn.addEventListener("click", () => this._save());
+      // Delete is a two-step confirm rendered inline in the popup, not the
+      // browser's native confirm() (looks out of place in the Companion
+      // app / kiosk dashboards and isn't themed like the rest of the UI).
       const deleteBtn = root.querySelector('[data-action="delete"]');
       if (deleteBtn)
-        deleteBtn.addEventListener("click", async () => {
-          if (!confirm("Deze gebeurtenis verwijderen?")) return;
-          await callService(this._hass, "delete_event", { event_id: deleteBtn.dataset.id });
+        deleteBtn.addEventListener("click", () => {
+          this._confirmDelete = true;
+          this._render();
+        });
+      const deleteCancelBtn = root.querySelector('[data-action="delete-cancel"]');
+      if (deleteCancelBtn)
+        deleteCancelBtn.addEventListener("click", () => {
+          this._confirmDelete = false;
+          this._render();
+        });
+      const deleteConfirmBtn = root.querySelector('[data-action="delete-confirm"]');
+      if (deleteConfirmBtn)
+        deleteConfirmBtn.addEventListener("click", async () => {
+          await callService(this._hass, "delete_event", { event_id: deleteConfirmBtn.dataset.id });
           this._formOpen = false;
           this._editingId = null;
+          this._confirmDelete = false;
           this._render();
         });
 

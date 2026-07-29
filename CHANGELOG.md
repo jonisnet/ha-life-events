@@ -3,6 +3,23 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.5 — unreleased
+
+### Added
+- Every entity (event entities and the calendar) now automatically carries
+  a "Life Events" **label**. Since event entities deliberately don't share
+  a device anymore (0.0.2-beta.4), this is how you can still find/filter
+  every entity belonging to this integration in one place, via Settings →
+  Areas, labels & zones → Labels. Applied once per entity on setup;
+  doesn't touch any other labels you've added yourself.
+
+### Changed
+- Deleting an event in the Manage card's edit popup no longer uses the
+  browser's native `confirm()` dialog (looked out of place, unstyled, in
+  the Companion app/kiosk dashboards). Clicking "Verwijderen" now shows an
+  inline "Weet je het zeker?" step with "Ja, verwijderen"/"Annuleren"
+  buttons, styled like the rest of the card.
+
 ## 0.0.2-beta.4
 
 ### Fixed

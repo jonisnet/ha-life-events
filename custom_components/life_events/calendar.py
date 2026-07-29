@@ -11,6 +11,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, DOMAIN_FRIENDLY_NAME
+from .entity import apply_life_events_label
 from .manager import LifeEventsManager
 
 
@@ -43,6 +44,7 @@ class LifeEventsCalendarEntity(CalendarEntity):
 
     async def async_added_to_hass(self) -> None:
         self.async_on_remove(async_dispatcher_connect(self.hass, self._manager.signal, self._handle_update))
+        apply_life_events_label(self.hass, self.entity_id)
 
     @callback
     def _handle_update(self) -> None:

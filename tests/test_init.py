@@ -14,9 +14,9 @@ from unittest.mock import patch
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.life_events.const import DOMAIN
+from custom_components.life_events.const import DOMAIN, DOMAIN_FRIENDLY_NAME
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er, label_registry as lr
 
 
 @pytest.fixture(autouse=True)
@@ -94,6 +94,28 @@ async def test_only_calendar_has_a_device(hass: HomeAssistant) -> None:
     by_domain = {e.entity_id.split(".", 1)[0]: e for e in entries_for_config_entry}
     assert by_domain["calendar"].device_id == devices[0].id
     assert by_domain[DOMAIN].device_id is None
+
+
+async def test_entities_carry_the_life_events_label(hass: HomeAssistant) -> None:
+    """Since entities aren't grouped under a device, a label is how users find/filter them all."""
+    entry = await _setup_entry(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "add_event",
+        {"name": "Peregrin Took", "date": "1990-04-01"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    label_reg = lr.async_get(hass)
+    label = label_reg.async_get_label_by_name(DOMAIN_FRIENDLY_NAME)
+    assert label is not None
+
+    ent_reg = er.async_get(hass)
+    entries_for_config_entry = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
+    assert len(entries_for_config_entry) >= 2  # calendar + at least the one event just added
+    assert all(label.label_id in e.labels for e in entries_for_config_entry)
 
 
 async def test_unload_entry_marks_entities_unavailable(hass: HomeAssistant) -> None:
