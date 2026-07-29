@@ -12,6 +12,13 @@ class EventEntity(Entity):
     """State = days until the next occurrence of the event's date."""
 
     should_poll = False
+    # Explicit, not just relying on the base class default: without this,
+    # HA prefixes the shared "Life Events" device name onto every person's
+    # friendly_name ("Life Events Jazlyn Propitius") once the entity is
+    # linked to a device - only surfaced once the entity/device-grouping
+    # fix actually started working. calendar.py already sets this
+    # explicitly for the same reason; this entity never did.
+    _attr_has_entity_name = False
 
     def __init__(self, manager, event_id: str) -> None:
         self._manager = manager

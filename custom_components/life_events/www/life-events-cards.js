@@ -19,7 +19,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.6 loaded");
+  console.info("Life Events cards: v0.0.2-beta.2 loaded");
 
   const DOMAIN = "life_events";
 
@@ -209,9 +209,75 @@
     return `${d}-${m}-${y}`;
   }
 
+  // Splits a stored combined name back into first/last name for the edit
+  // form. Names are stored as one string (no separate first/last fields),
+  // so this is a heuristic: first word = voornaam, everything else
+  // (including Dutch tussenvoegsels like "van der", "de") = achternaam -
+  // e.g. "Justin Deitelzweig Senior" -> ("Justin", "Deitelzweig Senior").
+  function splitName(fullName) {
+    const trimmed = (fullName || "").trim();
+    const spaceIdx = trimmed.indexOf(" ");
+    if (spaceIdx === -1) return { first: trimmed, last: "" };
+    return { first: trimmed.slice(0, spaceIdx), last: trimmed.slice(spaceIdx + 1).trim() };
+  }
+
   function monthOf(iso) {
     if (!iso) return null;
     return parseInt(iso.split("-")[1], 10);
+  }
+
+  // Shared by all three cards: a read-only "details" popup on the
+  // Upcoming/Month cards, and the (editable) add/edit popup on the Manage
+  // card, both use the same modal shell/backdrop-close behavior.
+  function modalWrap(title, bodyHtml, closeAction) {
+    return css`
+      <div class="bd-modal-backdrop">
+        <div class="bd-modal">
+          <div class="bd-modal-header">
+            <span class="bd-modal-title">${title}</span>
+            <button class="bd-icon-btn" data-action="${closeAction}">✕</button>
+          </div>
+          <div class="bd-modal-body">${bodyHtml}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Click-outside-to-close: delegates to the modal header's own close
+  // button rather than duplicating close logic here.
+  function bindModalBackdrops(root) {
+    root.querySelectorAll(".bd-modal-backdrop").forEach((backdrop) => {
+      backdrop.addEventListener("click", (e) => {
+        if (e.target !== backdrop) return;
+        const closeBtn = backdrop.querySelector(".bd-modal-header [data-action]");
+        if (closeBtn) closeBtn.click();
+      });
+    });
+  }
+
+  // Read-only "all attributes" view for a single event - used by the
+  // Upcoming/Month cards' details popup (Manage card has its own editable
+  // form instead).
+  function renderDetailsBody(e) {
+    const rows = [
+      ["Naam", e.name],
+      ["Datum", formatDate(e.date)],
+      ["Type", EVENT_TYPE_LABELS[e.eventType] || e.eventType],
+    ];
+    if (e.eventType !== "deceased" && e.age != null) rows.push(["Wordt", e.age]);
+    if (e.eventType === "deceased" && e.dateOfDeath) rows.push(["Datum van overlijden", formatDate(e.dateOfDeath)]);
+    if (e.phoneNumber) rows.push(["Telefoonnummer", e.phoneNumber]);
+    Object.entries(e.attributes || {}).forEach(([k, v]) => rows.push([k, v]));
+    return rows
+      .map(
+        ([label, value]) => css`
+          <div class="bd-details-row">
+            <div class="bd-details-label">${escapeAttr(label)}</div>
+            <div class="bd-details-value">${escapeAttr(value)}</div>
+          </div>
+        `
+      )
+      .join("");
   }
 
   async function callService(hass, service, data, wantsResponse) {
@@ -361,6 +427,12 @@
             table.bd-table td { padding: 4px 8px; border-bottom: 1px solid var(--divider-color); }
             .bd-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--divider-color); }
             .bd-row:last-child { border-bottom: none; }
+            .bd-row[data-action], table.bd-table tr[data-action] { cursor: pointer; }
+            .bd-row[data-action]:hover, table.bd-table tr[data-action]:hover { background: var(--secondary-background-color); }
+            .bd-details-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--divider-color); }
+            .bd-details-row:last-child { border-bottom: none; }
+            .bd-details-label { color: var(--secondary-text-color); font-size: 13px; }
+            .bd-details-value { font-weight: 500; text-align: right; }
             .bd-left { display: flex; align-items: center; gap: 12px; }
             .bd-name { font-weight: 500; }
             .bd-secondary { font-size: 12px; color: var(--secondary-text-color); }
@@ -404,6 +476,11 @@
       return { title: "Aankomende verjaardagen", days_ahead: 14, event_types: [] };
     }
 
+    constructor() {
+      super();
+      this._detailsId = null;
+    }
+
     _render() {
       if (!this._hass) return;
       const daysAhead = this._config.days_ahead ?? 14;
@@ -415,7 +492,7 @@
         ? events
             .map(
               (e) => css`
-              <div class="bd-row">
+              <div class="bd-row" data-action="details" data-id="${e.entity_id.split(".")[1]}">
                 <div class="bd-left">
                   ${this._config.show_icon === false ? "" : `<ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>`}
                   <div>
@@ -430,7 +507,31 @@
             .join("")
         : `<div class="bd-empty">Geen aankomende gebeurtenissen in de komende ${daysAhead} dagen.</div>`;
 
-      this._shell(rows);
+      // Looked up from the full, unfiltered event list (not the days_ahead-
+      // filtered `events` above) so the popup still works even for an event
+      // that's no longer within the window on a later re-render.
+      const detailsEvent = this._detailsId
+        ? getEvents(this._hass, null).find((e) => e.entity_id.split(".")[1] === this._detailsId)
+        : null;
+
+      this._shell(css`
+        ${rows}
+        ${detailsEvent ? modalWrap(detailsEvent.name, renderDetailsBody(detailsEvent), "close-details") : ""}
+      `);
+
+      this.shadowRoot.querySelectorAll('[data-action="details"]').forEach((row) =>
+        row.addEventListener("click", () => {
+          this._detailsId = row.dataset.id;
+          this._render();
+        })
+      );
+      this.shadowRoot.querySelectorAll('[data-action="close-details"]').forEach((btn) =>
+        btn.addEventListener("click", () => {
+          this._detailsId = null;
+          this._render();
+        })
+      );
+      bindModalBackdrops(this.shadowRoot);
     }
 
     static getConfigElement() {
@@ -487,6 +588,7 @@
     constructor() {
       super();
       this._selectedMonth = new Date().getMonth() + 1;
+      this._detailsId = null;
     }
 
     _render() {
@@ -512,7 +614,7 @@
             ${monthEvents
               .map(
                 (e) => css`
-                <tr>
+                <tr data-action="details" data-id="${e.entity_id.split(".")[1]}">
                   <td>${formatDate(e.date)}</td>
                   <td>${e.name}</td>
                   <td><span class="bd-type-badge">${EVENT_TYPE_LABELS[e.eventType] || e.eventType}</span></td>
@@ -525,7 +627,15 @@
         `
         : `<div class="bd-empty">Geen gebeurtenissen in ${MONTHS_NL[this._selectedMonth - 1]}.</div>`;
 
-      this._shell(`<div class="bd-months">${buttons}</div>${table}`);
+      const detailsEvent = this._detailsId
+        ? getEvents(this._hass, null).find((e) => e.entity_id.split(".")[1] === this._detailsId)
+        : null;
+
+      this._shell(css`
+        <div class="bd-months">${buttons}</div>
+        ${table}
+        ${detailsEvent ? modalWrap(detailsEvent.name, renderDetailsBody(detailsEvent), "close-details") : ""}
+      `);
 
       this.shadowRoot.querySelectorAll(".bd-month-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -533,6 +643,19 @@
           this._render();
         });
       });
+      this.shadowRoot.querySelectorAll('[data-action="details"]').forEach((row) =>
+        row.addEventListener("click", () => {
+          this._detailsId = row.dataset.id;
+          this._render();
+        })
+      );
+      this.shadowRoot.querySelectorAll('[data-action="close-details"]').forEach((btn) =>
+        btn.addEventListener("click", () => {
+          this._detailsId = null;
+          this._render();
+        })
+      );
+      bindModalBackdrops(this.shadowRoot);
     }
 
     static getConfigElement() {
@@ -588,6 +711,9 @@
       this._status = "";
       this._searchQuery = "";
       this._monthFilter = "";
+      this._genderFilter = "";
+      this._attrFilterKey = "";
+      this._attrFilterValue = "";
     }
 
     // Overrides the base class's hass setter. That one calls a full
@@ -610,20 +736,6 @@
       } else if (!this._suppressRender) {
         this._renderList();
       }
-    }
-
-    _modalWrap(title, bodyHtml, closeAction) {
-      return css`
-        <div class="bd-modal-backdrop">
-          <div class="bd-modal">
-            <div class="bd-modal-header">
-              <span class="bd-modal-title">${title}</span>
-              <button class="bd-icon-btn" data-action="${closeAction}">✕</button>
-            </div>
-            <div class="bd-modal-body">${bodyHtml}</div>
-          </div>
-        </div>
-      `;
     }
 
     // Renders one input-pair row per custom attribute. Purely DOM-driven
@@ -661,17 +773,51 @@
       return getEvents(this._hass, this._config.event_types).sort((a, b) => a.name.localeCompare(b.name));
     }
 
+    // Every custom attribute key seen across events, except "geslacht"
+    // (that one gets its own dedicated dropdown below) - lets the extra
+    // attribute filter adapt to whatever the user has actually defined
+    // (connectie, nummer_van, ...) instead of hardcoding more fields.
+    _knownAttributeKeys() {
+      const keys = new Set();
+      this._baseEvents().forEach((e) => Object.keys(e.attributes || {}).forEach((k) => k !== "geslacht" && keys.add(k)));
+      return [...keys].sort();
+    }
+
+    _knownAttributeValues(key) {
+      const values = new Set();
+      this._baseEvents().forEach((e) => {
+        const v = e.attributes && e.attributes[key];
+        if (v) values.add(v);
+      });
+      return [...values].sort();
+    }
+
     _rowsHtml() {
       const q = this._searchQuery.trim().toLowerCase();
+      const anyFilterActive =
+        q || this._monthFilter || this._genderFilter || (this._attrFilterKey && this._attrFilterValue);
+      if (!anyFilterActive) {
+        return `<div class="bd-empty">Kies eerst een filter (zoeken, maand, geslacht of een attribuut) om gebeurtenissen te tonen.</div>`;
+      }
+
       const events = this._baseEvents()
         .filter((e) => !q || e.name.toLowerCase().includes(q))
-        .filter((e) => !this._monthFilter || monthOf(e.date) === Number(this._monthFilter));
+        .filter((e) => !this._monthFilter || monthOf(e.date) === Number(this._monthFilter))
+        .filter(
+          (e) => !this._genderFilter || (e.attributes.geslacht || "").trim().toLowerCase() === this._genderFilter
+        )
+        .filter(
+          (e) =>
+            !this._attrFilterKey ||
+            !this._attrFilterValue ||
+            e.attributes[this._attrFilterKey] === this._attrFilterValue
+        );
 
       return events.length
         ? events
             .map(
               (e) => css`
-              <div class="bd-row">
+              <div class="bd-row" data-action="edit" data-id="${e.entity_id.split(".")[1]}">
                 <div class="bd-left">
                   <ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>
                   <div>
@@ -683,9 +829,6 @@
                           .join(" &middot; ")}</div>`
                       : ""}
                   </div>
-                </div>
-                <div>
-                  <button class="bd-icon-btn" data-action="edit" data-id="${e.entity_id.split(".")[1]}">✏️</button>
                 </div>
               </div>
             `
@@ -741,10 +884,14 @@
 
       const editing = this._editingId ? this._baseEvents().find((e) => e.entity_id === `${DOMAIN}.${this._editingId}`) : null;
 
+      const nameParts = splitName(editing ? editing.name : "");
+
       const formBody = css`
         <div class="bd-form">
-          <label>Naam</label>
-          <input id="f-name" value="${editing ? editing.name : ""}" />
+          <label>Voornaam</label>
+          <input id="f-firstname" value="${escapeAttr(nameParts.first)}" />
+          <label>Achternaam (optioneel)</label>
+          <input id="f-lastname" value="${escapeAttr(nameParts.last)}" />
           <label>Type</label>
           <select id="f-type">
             ${["birthday", "anniversary", "deceased"]
@@ -812,6 +959,9 @@
         </div>
       `;
 
+      const attrKeys = this._knownAttributeKeys();
+      const attrValues = this._attrFilterKey ? this._knownAttributeValues(this._attrFilterKey) : [];
+
       const panelBody = css`
         <div class="bd-filters">
           <input id="f-search" placeholder="Zoek op naam..." value="${this._searchQuery}" />
@@ -821,6 +971,32 @@
               (m, i) => `<option value="${i + 1}" ${Number(this._monthFilter) === i + 1 ? "selected" : ""}>${m}</option>`
             ).join("")}
           </select>
+          <select id="f-gender-filter">
+            <option value="">Alle geslachten</option>
+            <option value="man" ${this._genderFilter === "man" ? "selected" : ""}>Man</option>
+            <option value="vrouw" ${this._genderFilter === "vrouw" ? "selected" : ""}>Vrouw</option>
+            <option value="anders" ${this._genderFilter === "anders" ? "selected" : ""}>Anders</option>
+          </select>
+          ${attrKeys.length
+            ? css`
+              <select id="f-attr-key-filter">
+                <option value="">Kies attribuut...</option>
+                ${attrKeys
+                  .map((k) => `<option value="${escapeAttr(k)}" ${this._attrFilterKey === k ? "selected" : ""}>${escapeAttr(k)}</option>`)
+                  .join("")}
+              </select>
+              ${this._attrFilterKey
+                ? css`
+                  <select id="f-attr-value-filter">
+                    <option value="">Alle waarden</option>
+                    ${attrValues
+                      .map((v) => `<option value="${escapeAttr(v)}" ${this._attrFilterValue === v ? "selected" : ""}>${escapeAttr(v)}</option>`)
+                      .join("")}
+                  </select>
+                `
+                : ""}
+            `
+            : ""}
         </div>
         <div class="bd-actions">
           ${!this._formOpen ? `<button class="bd-btn" data-action="add">+ Toevoegen</button>` : ""}
@@ -838,14 +1014,14 @@
 
       this._shell(css`
         ${mainHtml}
-        ${isButtonMode && this._panelOpen ? this._modalWrap(this._config.title || "Beheren", panelBody, "close-panel") : ""}
-        ${this._formOpen ? this._modalWrap(editing ? "Bewerken" : "Toevoegen", formBody, "cancel") : ""}
-        ${this._importOpen ? this._modalWrap("Import / export", importExportBody, "close-io") : ""}
+        ${isButtonMode && this._panelOpen ? modalWrap(this._config.title || "Beheren", panelBody, "close-panel") : ""}
+        ${this._formOpen ? modalWrap(editing ? "Bewerken" : "Toevoegen", formBody, "cancel") : ""}
+        ${this._importOpen ? modalWrap("Import / export", importExportBody, "close-io") : ""}
       `);
 
       this._bindEvents();
       this._bindFilterEvents();
-      this._bindModalBackdrops();
+      bindModalBackdrops(this.shadowRoot);
     }
 
     _bindEvents() {
@@ -943,19 +1119,28 @@
           this._monthFilter = e.target.value;
           this._renderList();
         });
-    }
-
-    // Clicking outside the modal box closes it, by delegating to the
-    // already-bound header close button - avoids duplicating each modal's
-    // close logic here.
-    _bindModalBackdrops() {
-      this.shadowRoot.querySelectorAll(".bd-modal-backdrop").forEach((backdrop) => {
-        backdrop.addEventListener("click", (e) => {
-          if (e.target !== backdrop) return;
-          const closeBtn = backdrop.querySelector(".bd-modal-header [data-action]");
-          if (closeBtn) closeBtn.click();
+      const genderSelect = root.querySelector("#f-gender-filter");
+      if (genderSelect)
+        genderSelect.addEventListener("change", (e) => {
+          this._genderFilter = e.target.value;
+          this._renderList();
         });
-      });
+      const attrValueSelect = root.querySelector("#f-attr-value-filter");
+      if (attrValueSelect)
+        attrValueSelect.addEventListener("change", (e) => {
+          this._attrFilterValue = e.target.value;
+          this._renderList();
+        });
+      // Changing which attribute to filter on adds/removes the value
+      // dropdown itself, so this needs a full _render() (not just
+      // _renderList()), unlike the other filters above.
+      const attrKeySelect = root.querySelector("#f-attr-key-filter");
+      if (attrKeySelect)
+        attrKeySelect.addEventListener("change", (e) => {
+          this._attrFilterKey = e.target.value;
+          this._attrFilterValue = "";
+          this._render();
+        });
     }
 
     _loadFile() {
@@ -985,7 +1170,13 @@
 
     async _save() {
       const root = this.shadowRoot;
-      const name = root.querySelector("#f-name").value.trim();
+      const firstName = root.querySelector("#f-firstname").value.trim();
+      const lastName = root.querySelector("#f-lastname").value.trim();
+      // Kept as one combined name everywhere except this form (storage,
+      // entity naming/slugs, search, CSV/JSON export, ...) - only input/
+      // editing is split into two fields for convenience (e.g. someone
+      // changing their surname after marriage).
+      const name = lastName ? `${firstName} ${lastName}` : firstName;
       const eventType = root.querySelector("#f-type").value;
       const dateVal = root.querySelector("#f-date").value;
       const dateOfDeath = root.querySelector("#f-date-death").value;
@@ -993,8 +1184,8 @@
       const phoneCountry = root.querySelector("#f-phone-country").value;
       const phoneLocal = root.querySelector("#f-phone-local").value.trim();
 
-      if (!name || !dateVal) {
-        this._status = "Naam en datum zijn verplicht.";
+      if (!firstName || !dateVal) {
+        this._status = "Voornaam en datum zijn verplicht.";
         this._render();
         return;
       }

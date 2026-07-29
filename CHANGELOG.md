@@ -3,13 +3,45 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.6
+## 0.0.2-beta.2 — unreleased
 
 ### Fixed
-- **Important:** the device/entity-grouping fix from 0.0.2-beta.1 could
-  never actually have worked. It forwarded `DOMAIN` itself (`life_events`)
-  via `hass.config_entries.async_forward_entry_setups(entry, [DOMAIN,
-  ...])`, but HA core's `ConfigEntry.async_setup()` treats "forward to a
+- Entity `friendly_name` was showing the device name prefixed onto every
+  person's name ("Life Events Jazlyn Propitius") once the entity/device
+  grouping fix (0.0.2-beta.1) actually started working for real -
+  `EventEntity` never explicitly set `_attr_has_entity_name = False` the
+  way `calendar.py` already did, so it inherited whatever the base
+  `Entity` class defaults to. Set it explicitly.
+
+### Added
+- The Manage card's add/edit popup now has separate **Voornaam**/
+  **Achternaam** fields instead of one **Naam** field. Still stored and
+  used everywhere else as a single combined name (entity naming, search,
+  CSV/JSON export, ...) - only the input/edit form is split, so changing
+  just a surname (e.g. after marriage) no longer means retyping the whole
+  name. When editing an existing entry, the combined name is split back on
+  its first space (voornaam = first word, achternaam = the rest, including
+  Dutch tussenvoegsels like "van der").
+- Every card row is now clickable. In the Upcoming and Month cards, this
+  opens a read-only "details" popup showing every attribute (date, type,
+  age, phone number, custom attributes, ...). In the Manage card, it opens
+  the existing edit popup directly - the pencil-icon (✏️) button is gone,
+  since the whole row is the trigger now.
+- The Manage card's list is empty by default, with a message asking you to
+  pick a filter first, rather than dumping the entire list. Alongside the
+  existing search-by-name and month filters, added a **Geslacht**
+  (man/vrouw/anders) filter and a generic attribute filter: pick any
+  custom attribute key actually in use (e.g. `connectie`), then a value
+  seen for it - adapts automatically to whatever attributes you've
+  defined, no hardcoded schema.
+
+## 0.0.2-beta.1
+
+### Fixed
+- **Important:** the device/entity-grouping fix first attempted earlier in
+  this line could never actually have worked. It forwarded `DOMAIN` itself
+  (`life_events`) via `hass.config_entries.async_forward_entry_setups(entry,
+  [DOMAIN, ...])`, but HA core's `ConfigEntry.async_setup()` treats "forward to a
   platform whose domain equals the integration's own domain" as
   re-entering that same entry's setup (its `domain_is_integration` check),
   which always raises `OperationNotAllowed` since that call happens from
