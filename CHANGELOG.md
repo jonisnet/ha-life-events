@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.5 — unreleased
+## 0.0.2-beta.5
 
 ### Added
 - Every entity (event entities and the calendar) now automatically carries
