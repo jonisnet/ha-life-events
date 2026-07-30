@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.7 — unreleased
+## 0.0.2-beta.7
 
 ### Added
 - Optional **`time`** field (e.g. a birth time) alongside the existing
