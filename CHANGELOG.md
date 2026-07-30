@@ -3,6 +3,28 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.8 — unreleased
+
+### Fixed
+- **Important:** the Upcoming and Month cards' new "Bewerken" edit popup
+  (0.0.2-beta.6) had the same "typing gets silently wiped" bug the Manage
+  card had before - `hass` updates fire on *any* entity's state change
+  anywhere in HA, and the base card class blindly re-rendered on every
+  one, wiping in-progress typing in the edit form. Fixed structurally this
+  time instead of per-card: `LifeEventsBaseCard.set hass()` now detects an
+  open modal by checking the actual rendered DOM (`.bd-modal-backdrop`)
+  rather than relying on each card to remember to set a `_suppressRender`
+  flag - which is exactly how this bug reappeared, since nobody added
+  that flag when the Upcoming/Month cards gained their own popup. Any
+  future popup that uses `modalWrap()` is now safe by construction, with
+  nothing to remember. A prominent comment at the top of
+  `life-events-cards.js` documents this for future additions, and
+  `logo-drafts/hass-tick-suppression-test.html` is a reusable regression-
+  test pattern for any new stateful UI. Verified across all 6 existing
+  runtime test suites (66 checks total, all still passing) plus a new
+  9-check suite that specifically simulates unrelated hass ticks while
+  mid-edit on both the Upcoming and Month cards.
+
 ## 0.0.2-beta.7
 
 ### Added

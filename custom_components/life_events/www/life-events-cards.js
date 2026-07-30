@@ -14,12 +14,40 @@
  * (the reference date, used for every event type for backwards
  * compatibility), age_at_next_birthday, event_type, and (for deceased
  * persons) date_of_death.
+ *
+ * IMPORTANT - read before adding any new popup/form/filter with an input:
+ * -----------------------------------------------------------------------
+ * `hass` is reassigned on EVERY entity state change anywhere in the whole
+ * HA instance, not just this integration's own entities - it fires
+ * constantly. LifeEventsBaseCard's `set hass()` guards against this by
+ * skipping `_render()` while any `.bd-modal-backdrop` is in the shadow DOM
+ * (see that method), so a normal add/edit/details popup is safe *for
+ * free* - you don't need to do anything extra for it.
+ *
+ * This has still broken multiple times in this file's history (typing
+ * getting silently wiped mid-keystroke) whenever a NEW kind of always-
+ * visible, non-modal input was added - e.g. the Manage card's search/
+ * month/gender/attribute filter bar, which lives directly in the panel
+ * body, not inside a `.bd-modal-backdrop`. The DOM-based guard above can't
+ * see those. If you add another always-visible (non-modal) input:
+ *   1. Give the card its own `get hass()`/`set hass()` override (see
+ *      LifeEventsManageCard for the pattern) instead of relying on the
+ *      base class.
+ *   2. Route ordinary hass ticks through a *targeted* DOM update (e.g.
+ *      `_renderList()`, replacing only the read-only content) rather than
+ *      a full `_render()` - a full `_render()` always wipes whatever the
+ *      user is mid-typing, modal or not.
+ *   3. Verify it with a real browser test that specifically simulates an
+ *      unrelated `hass` tick while typing (see
+ *      logo-drafts/hass-tick-suppression-test.html for the pattern) -
+ *      this class of bug does not show up from reading the code, only
+ *      from actually exercising it at runtime.
  */
 (() => {
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.7 loaded");
+  console.info("Life Events cards: v0.0.2-beta.8 loaded");
 
   const DOMAIN = "life_events";
 
@@ -665,10 +693,24 @@
 
     set hass(hass) {
       this._hass = hass;
-      // Skip re-rendering while a form/textarea is open (e.g. the Manage
-      // card's add/edit form or import panel): hass updates on every state
-      // change anywhere in HA, and a full re-render would wipe out
-      // whatever the user is currently typing.
+      // Skip re-rendering while a modal is open (add/edit form, import
+      // panel, details popup, ...): hass updates fire on *any* entity's
+      // state change anywhere in HA, and a full re-render would wipe out
+      // whatever the user is currently typing inside it.
+      //
+      // This checks the actual rendered DOM (.bd-modal-backdrop, present
+      // whenever any card uses modalWrap()) instead of requiring every
+      // card to remember to set a `_suppressRender` flag itself - that
+      // manual-bookkeeping approach is exactly how this bug reappeared
+      // once already: the Upcoming/Month cards gained an editable modal
+      // (the "Bewerken" popup) without anyone adding the matching
+      // suppression logic. Checking the DOM directly makes it correct by
+      // construction for every card, including future ones, with nothing
+      // to remember. `_suppressRender` is still honored below for a card
+      // that needs to suppress for a reason a modal check can't see (e.g.
+      // the Manage card's always-visible, non-modal search/filter bar,
+      // which has its own hass override anyway - see LifeEventsManageCard).
+      if (this.shadowRoot && this.shadowRoot.querySelector(".bd-modal-backdrop")) return;
       if (this._suppressRender) return;
       this._render();
     }
