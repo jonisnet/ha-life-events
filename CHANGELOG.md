@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.8 — unreleased
+## 0.0.2-beta.8
 
 ### Fixed
 - **Important:** the Upcoming and Month cards' new "Bewerken" edit popup
