@@ -16,6 +16,7 @@ from .const import (
     CONF_ID,
     CONF_NAME,
     CONF_PHONE_NUMBER,
+    CONF_TIME,
     DEFAULT_ICONS,
     EVENT_TYPE_BIRTHDAY,
 )
@@ -43,6 +44,7 @@ class Event:
     date_of_death: date | None = None
     icon: str | None = None
     phone_number: str | None = None
+    time: str | None = None
     attributes: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -59,6 +61,7 @@ class Event:
         date_of_death: date | None = None,
         icon: str | None = None,
         phone_number: str | None = None,
+        time: str | None = None,
         attributes: dict[str, str] | None = None,
     ) -> "Event":
         return cls(
@@ -69,6 +72,7 @@ class Event:
             date_of_death=date_of_death,
             icon=icon,
             phone_number=phone_number or None,
+            time=time or None,
             attributes=dict(attributes or {}),
         )
 
@@ -78,6 +82,7 @@ class Event:
             CONF_NAME: self.name,
             CONF_EVENT_TYPE: self.event_type,
             CONF_DATE: self.date.isoformat(),
+            CONF_TIME: self.time,
             CONF_DATE_OF_DEATH: self.date_of_death.isoformat() if self.date_of_death else None,
             CONF_ICON: self.icon,
             CONF_PHONE_NUMBER: self.phone_number,
@@ -94,6 +99,7 @@ class Event:
             date_of_death=date.fromisoformat(raw[CONF_DATE_OF_DEATH]) if raw.get(CONF_DATE_OF_DEATH) else None,
             icon=raw.get(CONF_ICON),
             phone_number=raw.get(CONF_PHONE_NUMBER) or None,
+            time=raw.get(CONF_TIME) or None,
             attributes=dict(raw.get(CONF_ATTRIBUTES) or {}),
         )
 

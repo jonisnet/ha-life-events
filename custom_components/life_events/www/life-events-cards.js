@@ -19,7 +19,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.6 loaded");
+  console.info("Life Events cards: v0.0.2-beta.7 loaded");
 
   const DOMAIN = "life_events";
 
@@ -166,7 +166,7 @@
   const RESERVED_EVENT_ATTRS = new Set([
     "friendly_name", "icon", "unit_of_measurement",
     "date_of_birth", "age_at_next_birthday", "event_type",
-    "date_of_death", "phone_number",
+    "date_of_death", "phone_number", "time",
   ]);
 
   function customAttributesOf(st) {
@@ -198,6 +198,7 @@
         eventType: st.attributes.event_type || "birthday",
         dateOfDeath: st.attributes.date_of_death,
         phoneNumber: st.attributes.phone_number,
+        time: st.attributes.time,
         attributes: customAttributesOf(st),
       }))
       .filter((e) => !allowed || allowed.includes(e.eventType));
@@ -293,6 +294,7 @@
       ["Datum", formatDate(e.date)],
       ["Type", EVENT_TYPE_LABELS[e.eventType] || e.eventType],
     ];
+    if (e.time) rows.push(["Tijd", e.time]);
     if (e.eventType !== "deceased" && e.age != null) rows.push(["Wordt", e.age]);
     if (e.eventType === "deceased" && e.dateOfDeath) rows.push(["Datum van overlijden", formatDate(e.dateOfDeath)]);
     if (e.phoneNumber) rows.push(["Telefoonnummer", e.phoneNumber]);
@@ -358,6 +360,8 @@
         </select>
         <label>Datum</label>
         <input id="f-date" type="date" value="${editing ? editing.date : ""}" />
+        <label>Geboortetijd (optioneel, bv. van het geboortekaartje)</label>
+        <input id="f-time" type="time" value="${editing && editing.time ? editing.time : ""}" />
         <label>Datum van overlijden (alleen bij type 'Overleden')</label>
         <input id="f-date-death" type="date" value="${editing && editing.dateOfDeath ? editing.dateOfDeath : ""}" />
         <label>Icoon (optioneel, bv. mdi:cake)</label>
@@ -416,6 +420,7 @@
     const name = lastName ? `${firstName} ${lastName}` : firstName;
     const eventType = root.querySelector("#f-type").value;
     const dateVal = root.querySelector("#f-date").value;
+    const timeVal = root.querySelector("#f-time").value;
     const dateOfDeath = root.querySelector("#f-date-death").value;
     const icon = root.querySelector("#f-icon").value.trim();
     const phoneCountry = root.querySelector("#f-phone-country").value;
@@ -431,6 +436,9 @@
     // Only meaningful for birthday/anniversary; clears any previously set
     // number if the type was switched to deceased or the field was emptied.
     data.phone_number = PHONE_EVENT_TYPES.includes(eventType) && phoneLocal ? toE164(phoneLocal, phoneCountry) : "";
+    // Always included (even ""), same as phone_number, so clearing the
+    // field actually clears the stored value instead of leaving it as-is.
+    data.time = timeVal || "";
     // Always included (even {}), so removing every row actually clears
     // previously stored attributes - update_event replaces this field
     // wholesale rather than merging it key by key (see manager.py).

@@ -26,6 +26,10 @@ CONF_ATTRIBUTES = "attributes"
 # Only meaningful for birthday/anniversary events (enforced in the UI, not
 # the storage model - a deceased event just never gets one set).
 CONF_PHONE_NUMBER = "phone_number"
+# Optional, purely informational (no arithmetic done on it) - stored as a
+# plain "HH:MM" string, not a real time object. Rarely known for existing
+# entries, but often printed on a birth announcement card for a newborn.
+CONF_TIME = "time"
 
 # Legacy YAML fields (kept so existing configuration.yaml keeps validating during import)
 CONF_UNIQUE_ID = "unique_id"
@@ -78,6 +82,7 @@ CSV_FIELDNAMES = [
     CONF_NAME,
     CONF_EVENT_TYPE,
     CONF_DATE,
+    CONF_TIME,
     CONF_DATE_OF_DEATH,
     CONF_ICON,
     CONF_PHONE_NUMBER,

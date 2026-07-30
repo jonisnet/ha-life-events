@@ -87,3 +87,21 @@ def test_csv_export_import_roundtrip_keeps_phone_number():
     content = export_events(events, "csv")
     parsed = parse_events(content, "csv")
     assert parsed[0].phone_number == "+31612345678"
+
+
+def test_time_roundtrips_through_storage():
+    event = Event.create(name="Peregrin Took", date_=date(1990, 4, 1), time="14:37")
+    restored = Event.from_storage_dict(event.to_storage_dict())
+    assert restored.time == "14:37"
+
+
+def test_time_defaults_to_none():
+    event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22))
+    assert event.time is None
+
+
+def test_csv_export_import_roundtrip_keeps_time():
+    events = [Event.create(name="Peregrin Took", date_=date(1990, 4, 1), time="14:37")]
+    content = export_events(events, "csv")
+    parsed = parse_events(content, "csv")
+    assert parsed[0].time == "14:37"

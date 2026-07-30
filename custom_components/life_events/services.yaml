@@ -41,6 +41,11 @@ add_event:
       example: "+31612345678"
       selector:
         text:
+    time:
+      required: false
+      description: "Optional time of day (e.g. birth time), purely informational."
+      selector:
+        time:
     attributes:
       required: false
       description: Freeform extra attributes (key/value pairs).
@@ -84,6 +89,11 @@ update_event:
       description: "E.164 format, e.g. +31612345678. Only meaningful for birthday/anniversary events."
       selector:
         text:
+    time:
+      required: false
+      description: "Optional time of day (e.g. birth time), purely informational."
+      selector:
+        time:
     attributes:
       required: false
       selector:

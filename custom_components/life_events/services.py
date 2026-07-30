@@ -29,6 +29,7 @@ ADD_EVENT_SCHEMA = vol.Schema(
         vol.Optional("date_of_death"): cv.date,
         vol.Optional("icon"): cv.string,
         vol.Optional("phone_number"): cv.string,
+        vol.Optional("time"): cv.string,
         vol.Optional("attributes", default={}): {cv.string: cv.string},
     }
 )
@@ -42,6 +43,7 @@ UPDATE_EVENT_SCHEMA = vol.Schema(
         vol.Optional("date_of_death"): cv.date,
         vol.Optional("icon"): cv.string,
         vol.Optional("phone_number"): cv.string,
+        vol.Optional("time"): cv.string,
         vol.Optional("attributes"): {cv.string: cv.string},
     }
 )

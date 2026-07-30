@@ -3,6 +3,18 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.7 — unreleased
+
+### Added
+- Optional **`time`** field (e.g. a birth time) alongside the existing
+  date, for all event types. Purely informational - never required, no
+  calculation depends on it. Rarely known for existing entries, but often
+  printed on a birth announcement card for a newborn, so worth capturing
+  going forward. Editable in the Manage card's form (and now the
+  Upcoming/Month cards' edit popup too), shown in the details popup when
+  set, and round-trips through the `add_event`/`update_event` services and
+  CSV/JSON import-export.
+
 ## 0.0.2-beta.6
 
 ### Added
