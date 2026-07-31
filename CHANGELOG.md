@@ -3,6 +3,29 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.13 — unreleased
+
+### Added
+- **Tasteful "years since deceased" display**, replacing the blank
+  Leeftijd/age slot that `deceased` events showed before. Computed
+  server-side from `date_of_death` (a new `years_since_death` entity
+  attribute, ticking over on the anniversary itself, mirroring how a
+  birthday's age already works) and shown in three places: the Month
+  card's Leeftijd column ("X jaar geleden"), the Upcoming card's row
+  ("X jaar geleden" where "wordt X" shows for living events), and a new,
+  quietly-styled line in the details popup ("X jaar geleden overleden").
+  Wording chosen with the user rather than assumed, given the sensitivity
+  of the topic. Deceased events without a `date_of_death` set keep showing
+  nothing, same as before - this only fills in the blank when there's a
+  date to compute from. Sorting the Leeftijd column deliberately still
+  treats deceased rows as having no value (always sorts last) rather than
+  mixing this in with numeric age - they're different metrics.
+
+Verified with a new 7-check runtime test (all three surfaces, the
+no-date_of_death case, living events unaffected) plus 3 new pure-logic
+backend tests for the year-rollover math and 3 new entity-attribute tests,
+plus the full existing regression suite (105 checks, all still passing).
+
 ## 0.0.2-beta.12
 
 ### Added

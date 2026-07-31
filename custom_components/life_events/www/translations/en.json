@@ -83,5 +83,7 @@
   "fixed_attr_kind_dropdown": "Dropdown",
   "fixed_attr_options_placeholder": "Options, comma-separated (e.g. Man, Woman, Other)",
   "action_add_fixed_attr": "+ Add fixed attribute",
-  "action_save_fixed_attrs": "Save fixed attributes"
+  "action_save_fixed_attrs": "Save fixed attributes",
+  "deceased_years_ago": "Passed away {years} years ago",
+  "deceased_years_ago_short": "{years} years ago"
 }

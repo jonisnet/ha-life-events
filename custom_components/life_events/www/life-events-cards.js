@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.12 loaded");
+  console.info("Life Events cards: v0.0.2-beta.13 loaded");
 
   const DOMAIN = "life_events";
 
@@ -150,6 +150,8 @@
     fixed_attr_options_placeholder: "Opties, komma-gescheiden (bv. Man, Vrouw, Anders)",
     action_add_fixed_attr: "+ Vast attribuut toevoegen",
     action_save_fixed_attrs: "Vaste attributen opslaan",
+    deceased_years_ago: "{years} jaar geleden overleden",
+    deceased_years_ago_short: "{years} jaar geleden",
   };
 
   // Absolute directory this script itself was loaded from, used to fetch
@@ -432,6 +434,7 @@
         age: st.attributes.age_at_next_birthday,
         eventType: st.attributes.event_type || "birthday",
         dateOfDeath: st.attributes.date_of_death,
+        yearsSinceDeath: st.attributes.years_since_death,
         phoneNumber: st.attributes.phone_number,
         time: st.attributes.time,
         attributes: customAttributesOf(st),
@@ -579,7 +582,7 @@
     if (e.eventType === "deceased" && e.dateOfDeath) rows.push([t("label_date_of_death"), formatDate(e.dateOfDeath)]);
     if (e.phoneNumber) rows.push([t("label_phone"), e.phoneNumber]);
     Object.entries(e.attributes || {}).forEach(([k, v]) => rows.push([k, v]));
-    return rows
+    const rowsHtml = rows
       .map(
         ([label, value]) => css`
           <div class="bd-details-row">
@@ -589,6 +592,15 @@
         `
       )
       .join("");
+    // A full sentence ("X jaar geleden overleden"), not another label/value
+    // pair - shown as its own quiet, italic line rather than forced into
+    // the two-column row layout above, which would read oddly for a
+    // complete sentence.
+    const remembranceHtml =
+      e.eventType === "deceased" && e.yearsSinceDeath != null
+        ? css`<div class="bd-deceased-note">${t("deceased_years_ago", { years: e.yearsSinceDeath })}</div>`
+        : "";
+    return rowsHtml + remembranceHtml;
   }
 
   // Renders one input-pair row per custom attribute. Purely DOM-driven
@@ -1171,6 +1183,7 @@
             .bd-month-btn { padding: 8px 4px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; background: var(--secondary-background-color); color: var(--primary-text-color); }
             .bd-month-btn.selected { background: var(--primary-color); color: var(--text-primary-color, #fff); }
             .bd-empty { color: var(--secondary-text-color); font-style: italic; padding: 8px 0; }
+            .bd-deceased-note { color: var(--secondary-text-color); font-style: italic; text-align: center; padding: 10px 12px 0; }
             .bd-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
             .bd-form label { font-size: 12px; color: var(--secondary-text-color); }
             .bd-form input, .bd-form select, .bd-form textarea { padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
@@ -1247,7 +1260,7 @@
                   ${this._config.show_icon === false ? "" : `<ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>`}
                   <div>
                     <div class="bd-name">${e.name}</div>
-                    <div class="bd-secondary">${formatDate(e.date)} &middot; ${eventTypeLabel(e.eventType)}${e.eventType !== "deceased" && e.age != null ? ` &middot; ${t("inline_becomes", { age: e.age })}` : ""}</div>
+                    <div class="bd-secondary">${formatDate(e.date)} &middot; ${eventTypeLabel(e.eventType)}${e.eventType !== "deceased" && e.age != null ? ` &middot; ${t("inline_becomes", { age: e.age })}` : ""}${e.eventType === "deceased" && e.yearsSinceDeath != null ? ` &middot; ${t("deceased_years_ago_short", { years: e.yearsSinceDeath })}` : ""}</div>
                     ${i === 0 ? `<div class="bd-secondary" id="le-countdown"></div>` : ""}
                   </div>
                 </div>
@@ -1482,7 +1495,7 @@
                   <td>${formatDate(e.date)}</td>
                   <td>${e.name}</td>
                   <td><span class="bd-type-badge">${eventTypeLabel(e.eventType)}</span></td>
-                  <td>${e.eventType === "deceased" ? "" : e.age ?? ""}</td>
+                  <td>${e.eventType === "deceased" ? (e.yearsSinceDeath != null ? t("deceased_years_ago_short", { years: e.yearsSinceDeath }) : "") : e.age ?? ""}</td>
                 </tr>
               `
               )

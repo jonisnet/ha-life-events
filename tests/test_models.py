@@ -31,6 +31,35 @@ def test_years_at_next_occurrence():
     assert event.years_at_next_occurrence(date(2026, 6, 1)) == 2027 - 1935
 
 
+def test_years_since_death_before_anniversary_this_year():
+    event = Event.create(
+        name="Opa", date_=date(1930, 3, 3), event_type="deceased", date_of_death=date(2020, 11, 4)
+    )
+    # 2026-06-01 is before this year's Nov 4 anniversary, so the count
+    # should still be from LAST year's anniversary (5), not tick over to 6
+    # until Nov 4 itself.
+    assert event.years_since_death(date(2026, 6, 1)) == 5
+
+
+def test_years_since_death_on_the_anniversary_itself():
+    event = Event.create(
+        name="Opa", date_=date(1930, 3, 3), event_type="deceased", date_of_death=date(2020, 11, 4)
+    )
+    assert event.years_since_death(date(2026, 11, 4)) == 6
+
+
+def test_years_since_death_after_anniversary_this_year():
+    event = Event.create(
+        name="Opa", date_=date(1930, 3, 3), event_type="deceased", date_of_death=date(2020, 11, 4)
+    )
+    assert event.years_since_death(date(2026, 11, 5)) == 6
+
+
+def test_years_since_death_none_without_date_of_death():
+    event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22))
+    assert event.years_since_death(date(2026, 6, 1)) is None
+
+
 def test_deceased_event_keeps_date_of_death():
     event = Event.create(
         name="Opa",

@@ -81,7 +81,7 @@ dashboards written against the original integration keep working unmodified.
 | `name` | yes | |
 | `date` | yes | Reference date (birth date, wedding date, ...) |
 | `event_type` | no, default `birthday` | `birthday`, `anniversary` or `deceased` |
-| `date_of_death` | no | Only meaningful for `deceased` |
+| `date_of_death` | no | Only meaningful for `deceased`. When set, the cards show a computed, tasteful "X jaar geleden overleden" ("X years ago") instead of leaving the age blank - the underlying `years_since_death` entity attribute ticks over on the anniversary itself, same as a birthday's age. |
 | `icon` | no | Defaults per event type (`mdi:cake`, `mdi:ring`, `mdi:flower`) |
 | `phone_number` | no | E.164 format (e.g. `+31612345678`). Only meaningful for `birthday`/`anniversary`. The **Life Events: Manage** card lets you pick a country from the full dial-code list and type the local number (e.g. NL `0612345678`) — it's normalized to E.164 for you. |
 | `time` | no | Time of day (e.g. a birth time), purely informational - not used in any calculation. Rarely known for existing entries, but often printed on a birth announcement card for a newborn. |

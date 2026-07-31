@@ -83,5 +83,7 @@
   "fixed_attr_kind_dropdown": "Keuzelijst",
   "fixed_attr_options_placeholder": "Opties, komma-gescheiden (bv. Man, Vrouw, Anders)",
   "action_add_fixed_attr": "+ Vast attribuut toevoegen",
-  "action_save_fixed_attrs": "Vaste attributen opslaan"
+  "action_save_fixed_attrs": "Vaste attributen opslaan",
+  "deceased_years_ago": "{years} jaar geleden overleden",
+  "deceased_years_ago_short": "{years} jaar geleden"
 }

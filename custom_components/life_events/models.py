@@ -114,3 +114,19 @@ class Event:
         if next_occurrence < today:
             next_occurrence = next_occurrence.replace(year=today.year + 1)
         return next_occurrence.year - self.date.year
+
+    def years_since_death(self, today: date) -> int | None:
+        """Complete years since date_of_death, counting up on each anniversary.
+
+        Mirrors years_at_next_occurrence's rollover logic but looks
+        backward (the most recently passed anniversary) instead of forward,
+        since "years ago" should already read one higher on the anniversary
+        date itself, the same way a birthday's age ticks over that day.
+        Returns None if no date_of_death is set (optional field).
+        """
+        if not self.date_of_death:
+            return None
+        last_occurrence = date(today.year, self.date_of_death.month, self.date_of_death.day)
+        if last_occurrence > today:
+            last_occurrence = last_occurrence.replace(year=today.year - 1)
+        return last_occurrence.year - self.date_of_death.year

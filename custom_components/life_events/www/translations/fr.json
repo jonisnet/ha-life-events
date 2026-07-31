@@ -83,5 +83,7 @@
   "fixed_attr_kind_dropdown": "Liste déroulante",
   "fixed_attr_options_placeholder": "Options, séparées par des virgules (ex. Homme, Femme, Autre)",
   "action_add_fixed_attr": "+ Ajouter un attribut fixe",
-  "action_save_fixed_attrs": "Enregistrer les attributs fixes"
+  "action_save_fixed_attrs": "Enregistrer les attributs fixes",
+  "deceased_years_ago": "Décédé(e) il y a {years} ans",
+  "deceased_years_ago_short": "il y a {years} ans"
 }
