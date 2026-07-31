@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.3-beta.1 loaded");
+  console.info("Life Events cards: v0.0.3-beta.2 loaded");
 
   const DOMAIN = "life_events";
 
@@ -921,6 +921,41 @@
     el.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
+  // Runs `doRender` (typically `this._render()`, a full innerHTML rebuild)
+  // while preserving focus/cursor position on whatever input inside `el`
+  // currently has it. A rebuild always destroys and recreates every child
+  // node, including the focused one, so even a re-render that produces
+  // byte-identical markup still silently drops focus and the cursor -
+  // which is exactly what made editor fields feel like they "stopped
+  // accepting keystrokes": a re-render landing while the user was mid-
+  // typing (an echoed config-changed event, or the one-time translations/
+  // fixed-attributes load callback resolving) would rebuild the DOM under
+  // their cursor. Only handles simple text-like inputs identified by id
+  // (matching how every field in this file's editors and forms is built) -
+  // good enough here since that's the only kind of thing that can hold
+  // focus in these editors.
+  function renderPreservingFocus(el, doRender) {
+    const active = document.activeElement;
+    let restore = null;
+    if (active && active.id && el.contains(active)) {
+      restore = { id: active.id, selectionStart: active.selectionStart, selectionEnd: active.selectionEnd };
+    }
+    doRender();
+    if (!restore) return;
+    const again = el.querySelector(`#${CSS.escape(restore.id)}`);
+    if (!again) return;
+    again.focus();
+    if (typeof again.setSelectionRange === "function" && restore.selectionStart != null) {
+      try {
+        again.setSelectionRange(restore.selectionStart, restore.selectionEnd);
+      } catch (err) {
+        // Not all input types support setSelectionRange (e.g. type=number) -
+        // focus is already restored above either way, which is the part
+        // that actually matters for "can I keep typing".
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------
   // Shared visual editor styling + widgets. Editors render into light DOM
   // (this.innerHTML, not a shadow root), so this <style> tag is included
@@ -1106,15 +1141,24 @@
       // Kicks off a fetch for this hass's language the first time it's
       // seen; a no-op once cached (see ensureTranslations()). The callback
       // only fires once per language, right after it first loads - not on
-      // every subsequent tick - so this doesn't fight with the render
-      // suppression below or wipe in-progress typing.
-      ensureTranslations(hass, () => this._render());
-      ensureFixedAttributes(hass, () => this._render());
-      // Skip re-rendering while a modal is open (add/edit form, import
-      // panel, details popup, ...): hass updates fire on *any* entity's
-      // state change anywhere in HA, and a full re-render would wipe out
-      // whatever the user is currently typing inside it.
-      //
+      // every subsequent tick - but that one time can still land while a
+      // modal is open, so it must go through the exact same guard as an
+      // ordinary tick below (_safeRerender()), not call _render()
+      // directly - an earlier version did call it directly, which bypassed
+      // the modal check entirely and could wipe an open add/edit form the
+      // moment translations/fixed-attributes finished their first load.
+      ensureTranslations(hass, () => this._safeRerender());
+      ensureFixedAttributes(hass, () => this._safeRerender());
+      this._safeRerender();
+    }
+
+    // Skip re-rendering while a modal is open (add/edit form, import
+    // panel, details popup, ...): hass updates fire on *any* entity's
+    // state change anywhere in HA, and a full re-render would wipe out
+    // whatever the user is currently typing inside it. Shared by every
+    // caller that might trigger a re-render outside a direct hass tick
+    // (see set hass() above) so none of them can bypass this check.
+    _safeRerender() {
       // This checks the actual rendered DOM (.bd-modal-backdrop, present
       // whenever any card uses modalWrap()) instead of requiring every
       // card to remember to set a `_suppressRender` flag itself - that
@@ -1355,21 +1399,40 @@
 
   class LifeEventsUpcomingCardEditor extends HTMLElement {
     setConfig(config) {
-      this._config = config || {};
+      const incoming = config || {};
       // HA's editor dialog echoes our own config-changed events straight
       // back into a fresh setConfig() call. Rebuilding the DOM on that
       // echo (same bug as the hass-render issue elsewhere) would wipe
       // whatever the user is mid-typing on every keystroke.
-      if (this._suppressSetConfig) return;
-      this._render();
+      //
+      // Detected via _pendingEchoes, a set of every config snapshot this
+      // editor itself has sent out but not yet seen echoed back (see
+      // _update()) - not a short-lived "just fired an update" flag, and
+      // not just a comparison against the single latest config either.
+      // Both of those break when the user types faster than one
+      // round-trip: several config-changed events can be in flight at
+      // once, and their echoes can land out of order relative to more
+      // recent keystrokes - comparing only against "the current config"
+      // would then treat an older (but still self-issued) echo as a real
+      // external change and re-render on it anyway, tearing the input
+      // down mid-typing. Matching by set membership recognizes an echo as
+      // "one of mine" regardless of arrival order, so it's simply
+      // discarded instead of ever reaching _render().
+      if (this._pendingEchoes && this._pendingEchoes.has(JSON.stringify(incoming))) {
+        this._pendingEchoes.delete(JSON.stringify(incoming));
+        return;
+      }
+      this._config = incoming;
+      renderPreservingFocus(this, () => this._render());
     }
     set hass(hass) {
       this._hass = hass;
-      // Fires _render() once, the first time this hass's language finishes
-      // loading - not on every tick - so it's safe even though the editor
-      // has no other re-render protection (see ensureTranslations()).
-      ensureTranslations(hass, () => this._render());
-      ensureFixedAttributes(hass, () => this._render());
+      // Fires once, the first time this hass's language/fixed-attrs
+      // schema finishes loading - not on every tick - but that one time
+      // can still land while the user is already mid-typing, so it goes
+      // through the same focus-preserving path as everything else.
+      ensureTranslations(hass, () => renderPreservingFocus(this, () => this._render()));
+      ensureFixedAttributes(hass, () => renderPreservingFocus(this, () => this._render()));
     }
     _render() {
       if (!this._config) return;
@@ -1396,9 +1459,9 @@
     }
     _update(patch) {
       this._config = { ...this._config, ...patch };
-      this._suppressSetConfig = true;
+      this._pendingEchoes = this._pendingEchoes || new Set();
+      this._pendingEchoes.add(JSON.stringify(this._config));
       fireEvent(this, "config-changed", { config: this._config });
-      Promise.resolve().then(() => { this._suppressSetConfig = false; });
     }
   }
 
@@ -1579,14 +1642,21 @@
 
   class LifeEventsMonthCardEditor extends HTMLElement {
     setConfig(config) {
-      this._config = config || {};
-      if (this._suppressSetConfig) return;
-      this._render();
+      const incoming = config || {};
+      // See LifeEventsUpcomingCardEditor's setConfig() for why this uses
+      // _pendingEchoes rather than a timing-based flag or a plain
+      // comparison against just the latest config.
+      if (this._pendingEchoes && this._pendingEchoes.has(JSON.stringify(incoming))) {
+        this._pendingEchoes.delete(JSON.stringify(incoming));
+        return;
+      }
+      this._config = incoming;
+      renderPreservingFocus(this, () => this._render());
     }
     set hass(hass) {
       this._hass = hass;
-      ensureTranslations(hass, () => this._render());
-      ensureFixedAttributes(hass, () => this._render());
+      ensureTranslations(hass, () => renderPreservingFocus(this, () => this._render()));
+      ensureFixedAttributes(hass, () => renderPreservingFocus(this, () => this._render()));
     }
     _render() {
       if (!this._config) return;
@@ -1609,9 +1679,9 @@
     }
     _update(patch) {
       this._config = { ...this._config, ...patch };
-      this._suppressSetConfig = true;
+      this._pendingEchoes = this._pendingEchoes || new Set();
+      this._pendingEchoes.add(JSON.stringify(this._config));
       fireEvent(this, "config-changed", { config: this._config });
-      Promise.resolve().then(() => { this._suppressSetConfig = false; });
     }
   }
 
@@ -1654,8 +1724,25 @@
     set hass(hass) {
       const firstRender = !this._hass;
       this._hass = hass;
-      ensureTranslations(hass, () => this._render());
-      ensureFixedAttributes(hass, () => this._render());
+      // Same reasoning as LifeEventsBaseCard._safeRerender(): the one-time
+      // load callback must not call _render() unconditionally, since that
+      // would bypass this card's own _suppressRender guard (the base
+      // class's modal-backdrop check doesn't cover this card's
+      // always-visible search/filter bar - that's why this card overrides
+      // hass at all) and could wipe an open add/edit form or in-progress
+      // search text.
+      // A full _render() here (even guarded by _suppressRender) would
+      // still wipe the always-visible search/month/gender/attribute filter
+      // bar if the user happens to be typing in it with no modal open -
+      // that's exactly why ordinary hass ticks route through the
+      // targeted _renderList() instead of _render() below; this callback
+      // does the same, for the same reason.
+      const rerenderIfSafe = () => {
+        if (this._suppressRender) return;
+        if (this._hass) this._renderList();
+      };
+      ensureTranslations(hass, rerenderIfSafe);
+      ensureFixedAttributes(hass, rerenderIfSafe);
       if (firstRender) {
         this._render();
       } else if (!this._suppressRender) {
@@ -2064,14 +2151,21 @@
 
   class LifeEventsManageCardEditor extends HTMLElement {
     setConfig(config) {
-      this._config = config || {};
-      if (this._suppressSetConfig) return;
-      this._render();
+      const incoming = config || {};
+      // See LifeEventsUpcomingCardEditor's setConfig() for why this uses
+      // _pendingEchoes rather than a timing-based flag or a plain
+      // comparison against just the latest config.
+      if (this._pendingEchoes && this._pendingEchoes.has(JSON.stringify(incoming))) {
+        this._pendingEchoes.delete(JSON.stringify(incoming));
+        return;
+      }
+      this._config = incoming;
+      renderPreservingFocus(this, () => this._render());
     }
     set hass(hass) {
       this._hass = hass;
-      ensureTranslations(hass, () => this._render());
-      ensureFixedAttributes(hass, () => this._render());
+      ensureTranslations(hass, () => renderPreservingFocus(this, () => this._render()));
+      ensureFixedAttributes(hass, () => renderPreservingFocus(this, () => this._render()));
     }
     _render() {
       if (!this._config) return;
@@ -2109,9 +2203,9 @@
     }
     _update(patch) {
       this._config = { ...this._config, ...patch };
-      this._suppressSetConfig = true;
+      this._pendingEchoes = this._pendingEchoes || new Set();
+      this._pendingEchoes.add(JSON.stringify(this._config));
       fireEvent(this, "config-changed", { config: this._config });
-      Promise.resolve().then(() => { this._suppressSetConfig = false; });
     }
   }
 

@@ -3,6 +3,44 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.3-beta.2 — unreleased
+
+### Fixed
+- **Typing in a card's visual editor (e.g. the Titel field) could lose the
+  cursor/focus and effectively stop accepting keystrokes.** Two separate
+  causes, both in how the 3 card editors (Upcoming/Month/Manage) handle
+  re-rendering:
+  - HA's editor dialog echoes our own `config-changed` events back into a
+    fresh `setConfig()` call. The old guard against re-rendering on that
+    echo was a flag that reset after a single microtask - too short for
+    HA's real dialog round-trip, and broken further by fast typing (several
+    of our own updates could be in flight before any echo arrived, so an
+    older echo could look like a genuine external change and still trigger
+    a render). Replaced with `_pendingEchoes`, a set of every config
+    snapshot the editor has sent out but not yet seen echoed back - an
+    incoming config is recognized and discarded as "one of mine" by exact
+    match, regardless of arrival order.
+  - Separately, the one-time callback that fires once translations/fixed-
+    attributes finish their first load called `_render()` unconditionally,
+    including in the middle of the user typing. Fixed with a new
+    `renderPreservingFocus()` helper that captures focus + cursor position
+    before any editor re-render and restores it on the (possibly rebuilt)
+    element afterwards - not just for this one call site, but every
+    `_render()` in the 3 editors, so any future async trigger is covered
+    by construction.
+  - The same "callback calls `_render()`/a full rebuild directly" mistake
+    also affected the *live* Upcoming/Month/Manage cards themselves, not
+    just their editors: it bypassed the modal-open / `_suppressRender`
+    checks that protect an open add/edit popup or the Manage card's search
+    bar. Fixed by routing through the existing guarded paths
+    (`_safeRerender()` for Upcoming/Month, `_renderList()` for Manage)
+    instead of calling `_render()` directly.
+
+Verified with a new 5-check runtime test that simulates HA's real
+(delayed, not just-a-microtask) config echo interleaved with fast typing
+and a mid-typing fixed-attributes load, plus the full existing regression
+suite (116 checks, all still passing).
+
 ## 0.0.3-beta.1
 
 Version bump only, no functional changes beyond 0.0.2-beta.13 - starts the
