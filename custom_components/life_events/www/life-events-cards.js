@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.3-beta.4 loaded");
+  console.info("Life Events cards: v0.0.3-beta.5 loaded");
 
   const DOMAIN = "life_events";
 
@@ -152,6 +152,15 @@
     action_save_fixed_attrs: "Vaste attributen opslaan",
     deceased_years_ago: "{years} jaar geleden overleden",
     deceased_years_ago_short: "{years} jaar geleden",
+    backfill_pill_label: "{key}: {count} ontbrekend",
+    editor_date_format: "Datumnotatie",
+    date_format_short: "dd-mm-jjjj",
+    date_format_medium: "dd maand jjjj",
+    date_format_long: "weekdag dd maand",
+    action_edit_yaml: "Bewerk als YAML",
+    action_edit_form: "Terug naar formulier",
+    yaml_edit_hint: "Technische veldnamen (Engels), niet vertaald - net als YAML-bewerken elders in Home Assistant.",
+    validation_invalid_fixed_option: "{key} moet een van de toegestane waarden zijn.",
   };
 
   // Absolute directory this script itself was loaded from, used to fetch
@@ -453,9 +462,22 @@
       .filter((e) => !allowed || allowed.includes(e.eventType));
   }
 
-  function formatDate(iso) {
+  // `format`: "short" (default, dd-mm-yyyy, locale-agnostic - unchanged
+  // behavior for anyone who never touches the new per-card setting),
+  // "medium" (dd MMMM yyyy) or "long" (dddd dd MMMM), both locale-correct
+  // via Intl.DateTimeFormat and currentLangCode - same technique as
+  // weekdayName() above, so this is "per-language" for free.
+  function formatDate(iso, format) {
     if (!iso) return "";
     const [y, m, d] = iso.split("-");
+    if (!format || format === "short") return `${d}-${m}-${y}`;
+    const date = new Date(Number(y), Number(m) - 1, Number(d));
+    if (format === "medium") {
+      return new Intl.DateTimeFormat(currentLangCode, { day: "numeric", month: "long", year: "numeric" }).format(date);
+    }
+    if (format === "long") {
+      return new Intl.DateTimeFormat(currentLangCode, { weekday: "long", day: "numeric", month: "long" }).format(date);
+    }
     return `${d}-${m}-${y}`;
   }
 
@@ -585,15 +607,15 @@
   // Read-only "all attributes" view for a single event - used by the
   // Upcoming/Month cards' details popup (Manage card has its own editable
   // form instead).
-  function renderDetailsBody(e) {
+  function renderDetailsBody(e, dateFormat) {
     const rows = [
       [t("label_name"), e.name],
-      [t("label_date"), formatDate(e.date)],
+      [t("label_date"), formatDate(e.date, dateFormat)],
       [t("label_type"), eventTypeLabel(e.eventType)],
     ];
     if (e.time) rows.push([t("label_time"), e.time]);
     if (e.eventType !== "deceased" && e.age != null) rows.push([t("label_becomes"), e.age]);
-    if (e.eventType === "deceased" && e.dateOfDeath) rows.push([t("label_date_of_death"), formatDate(e.dateOfDeath)]);
+    if (e.eventType === "deceased" && e.dateOfDeath) rows.push([t("label_date_of_death"), formatDate(e.dateOfDeath, dateFormat)]);
     if (e.phoneNumber) rows.push([t("label_phone"), e.phoneNumber]);
     Object.entries(e.attributes || {}).forEach(([k, v]) => rows.push([k, v]));
     const rowsHtml = rows
@@ -756,6 +778,7 @@
               <div class="bd-actions">
                 <button class="bd-btn" data-action="save">${editing ? t("action_save") : t("action_add")}</button>
                 <button class="bd-btn secondary" data-action="cancel">${t("action_cancel")}</button>
+                <button type="button" class="bd-btn secondary" data-action="edit-as-yaml">${t("action_edit_yaml")}</button>
                 ${editing ? `<button class="bd-btn danger" data-action="delete" data-id="${editingId}">${t("action_delete")}</button>` : ""}
               </div>
             `
@@ -764,68 +787,202 @@
     `;
   }
 
-  // Reads the form fields from the DOM and performs the add_event/
-  // update_event service call. Returns { ok: true } or
-  // { ok: false, message } for the caller to display.
-  async function saveEventForm(root, hass, editingId) {
+  // YAML-lite mirror of the same form, toggled via the "edit-as-yaml"
+  // button above. Deliberately NOT a general YAML parser/dumper (no
+  // external dep - see the file header) - a fixed, schema-specific set of
+  // technical field names (English, not run through t()), the same
+  // "raw/technical, not localized" contract HA's own "Edit in YAML" uses
+  // elsewhere (entities, automations, ...). `fields` is the shape produced
+  // by readFormFieldsRaw()/parseYamlLite() below.
+  function renderYamlFormBody(fields, editingId) {
+    return css`
+      <div class="bd-form">
+        <div class="le-hint">${t("yaml_edit_hint")}</div>
+        <textarea id="f-yaml" rows="14" spellcheck="false">${escapeAttr(fieldsToYamlLite(fields))}</textarea>
+        <div class="bd-actions">
+          <button class="bd-btn" data-action="save">${editingId ? t("action_save") : t("action_add")}</button>
+          <button type="button" class="bd-btn secondary" data-action="exit-yaml">${t("action_edit_form")}</button>
+          <button class="bd-btn secondary" data-action="cancel">${t("action_cancel")}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // Quotes a value only when needed to round-trip safely (leading/trailing
+  // whitespace, empty, or containing ":"/"#" - which would otherwise be
+  // misread as a new key or a comment by parseYamlLite below); everything
+  // else is emitted bare for readability, matching how real YAML dumpers
+  // behave and what HA users already expect from "Edit in YAML".
+  function yamlLiteValue(v) {
+    const s = v == null ? "" : String(v);
+    return s === "" || s !== s.trim() || /[:#]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s;
+  }
+
+  function fieldsToYamlLite(fields) {
+    const lines = [
+      `firstname: ${yamlLiteValue(fields.firstName)}`,
+      `lastname: ${yamlLiteValue(fields.lastName)}`,
+      `type: ${yamlLiteValue(fields.eventType)}`,
+      `date: ${yamlLiteValue(fields.date)}`,
+      `time: ${yamlLiteValue(fields.time)}`,
+      `date_of_death: ${yamlLiteValue(fields.dateOfDeath)}`,
+      `icon: ${yamlLiteValue(fields.icon)}`,
+      `phone: ${yamlLiteValue(fields.phoneNumber)}`,
+    ];
+    const attrKeys = Object.keys(fields.attributes || {});
+    if (!attrKeys.length) {
+      lines.push("attributes: {}");
+    } else {
+      lines.push("attributes:");
+      attrKeys.forEach((k) => lines.push(`  ${yamlLiteValue(k)}: ${yamlLiteValue(fields.attributes[k])}`));
+    }
+    return lines.join("\n");
+  }
+
+  function unquoteYamlLiteValue(raw) {
+    const s = raw.trim();
+    if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) return s.slice(1, -1).replace(/\\"/g, '"');
+    return s;
+  }
+
+  // Reverse of fieldsToYamlLite(). Deliberately lenient (no throwing on
+  // malformed input): a line without a ":" is skipped, an unrecognized
+  // top-level key is ignored, and whatever ends up missing/invalid is
+  // caught afterwards by the same validateAndBuildPayload() every other
+  // save path goes through - so a typo here surfaces as the normal "Voornaam
+  // en datum zijn verplicht" message, not a crash.
+  function parseYamlLite(text) {
+    const fields = { firstName: "", lastName: "", eventType: "birthday", date: "", time: "", dateOfDeath: "", icon: "", phoneNumber: "", attributes: {} };
+    const KEY_MAP = { firstname: "firstName", lastname: "lastName", type: "eventType", date: "date", time: "time", date_of_death: "dateOfDeath", icon: "icon", phone: "phoneNumber" };
+    let inAttributes = false;
+    for (const rawLine of (text || "").split("\n")) {
+      if (!rawLine.trim()) continue;
+      const indented = /^\s/.test(rawLine);
+      const colonIdx = rawLine.indexOf(":");
+      if (colonIdx === -1) continue;
+      const key = rawLine.slice(0, colonIdx).trim();
+      const value = unquoteYamlLiteValue(rawLine.slice(colonIdx + 1));
+      if (!indented) {
+        inAttributes = key === "attributes";
+        if (inAttributes) continue;
+        const fieldName = KEY_MAP[key];
+        if (fieldName) fields[fieldName] = value;
+      } else if (inAttributes && key) {
+        fields.attributes[key] = value;
+      }
+    }
+    if (!["birthday", "anniversary", "deceased"].includes(fields.eventType)) fields.eventType = "birthday";
+    return fields;
+  }
+
+  // Adapter so the parsed/raw `fields` shape can be fed straight back into
+  // renderEventFormBody(), which expects an `editing`-shaped object (the
+  // same shape getEvents() produces for a real entity).
+  function fieldsToEditingLike(fields) {
+    return {
+      name: fields.lastName ? `${fields.firstName} ${fields.lastName}` : fields.firstName,
+      date: fields.date,
+      time: fields.time,
+      dateOfDeath: fields.dateOfDeath,
+      icon: fields.icon,
+      phoneNumber: fields.phoneNumber,
+      eventType: fields.eventType,
+      attributes: fields.attributes,
+    };
+  }
+
+  // Reads the current, possibly in-progress form values straight from the
+  // DOM into the plain "fields" shape shared with the YAML path
+  // (parseYamlLite() below produces the same shape from text instead of
+  // DOM nodes) - neither validated nor turned into a service payload yet.
+  function readFormFieldsRaw(root) {
     const firstName = root.querySelector("#f-firstname").value.trim();
     const lastName = root.querySelector("#f-lastname").value.trim();
-    // Kept as one combined name everywhere except this form (storage,
-    // entity naming/slugs, search, CSV/JSON export, ...) - only input/
-    // editing is split into two fields for convenience (e.g. someone
-    // changing their surname after marriage).
-    const name = lastName ? `${firstName} ${lastName}` : firstName;
     const eventType = root.querySelector("#f-type").value;
-    const dateVal = root.querySelector("#f-date").value;
-    const timeVal = root.querySelector("#f-time").value;
+    const date = root.querySelector("#f-date").value;
+    const time = root.querySelector("#f-time").value;
     const dateOfDeath = root.querySelector("#f-date-death").value;
     const icon = root.querySelector("#f-icon").value.trim();
     const phoneCountry = root.querySelector("#f-phone-country").value;
     const phoneLocal = root.querySelector("#f-phone-local").value.trim();
-
-    if (!firstName || !dateVal) {
-      return { ok: false, message: t("validation_required") };
-    }
-
-    const fixedFieldValues = {};
-    root.querySelectorAll("[data-fixed-key]").forEach((field) => {
-      fixedFieldValues[field.dataset.fixedKey] = field.value.trim();
-    });
-    const fixedValues = {};
-    for (const fa of fixedAttrsCache) {
-      const value = fixedFieldValues[fa.key] || "";
-      if (!value) {
-        return { ok: false, message: t("validation_required_fixed", { key: fa.key }) };
-      }
-      fixedValues[fa.key] = value;
-    }
-
-    const data = { name, event_type: eventType, date: dateVal };
-    if (icon) data.icon = icon;
-    if (eventType === "deceased" && dateOfDeath) data.date_of_death = dateOfDeath;
     // Only meaningful for birthday/anniversary; clears any previously set
     // number if the type was switched to deceased or the field was emptied.
-    data.phone_number = PHONE_EVENT_TYPES.includes(eventType) && phoneLocal ? toE164(phoneLocal, phoneCountry) : "";
-    // Always included (even ""), same as phone_number, so clearing the
-    // field actually clears the stored value instead of leaving it as-is.
-    data.time = timeVal || "";
-    // Always included (even {}), so removing every row actually clears
-    // previously stored attributes - update_event replaces this field
-    // wholesale rather than merging it key by key (see manager.py).
-    const attributes = { ...fixedValues };
+    const phoneNumber = PHONE_EVENT_TYPES.includes(eventType) && phoneLocal ? toE164(phoneLocal, phoneCountry) : "";
+
+    const attributes = {};
+    root.querySelectorAll("[data-fixed-key]").forEach((field) => {
+      attributes[field.dataset.fixedKey] = field.value.trim();
+    });
     root.querySelectorAll("#f-attrs-rows .bd-attr-row").forEach((row) => {
       const key = row.querySelector(".f-attr-key").value.trim();
       const value = row.querySelector(".f-attr-value").value.trim();
       if (key) attributes[key] = value;
     });
-    data.attributes = attributes;
 
+    return { firstName, lastName, eventType, date, time, dateOfDeath, icon, phoneNumber, attributes };
+  }
+
+  // Validates a `fields` object (from either readFormFieldsRaw() or
+  // parseYamlLite()) and, if valid, builds the add_event/update_event
+  // service payload. Shared by both the normal-form and YAML save paths so
+  // neither can drift from the other's rules.
+  function validateAndBuildPayload(fields) {
+    if (!fields.firstName || !fields.date) {
+      return { ok: false, message: t("validation_required") };
+    }
+    for (const fa of fixedAttrsCache) {
+      const value = fields.attributes[fa.key] || "";
+      if (!value) {
+        return { ok: false, message: t("validation_required_fixed", { key: fa.key }) };
+      }
+      if (fa.options && fa.options.length) {
+        // Case-insensitive, same as the dropdown's own pre-fill (see
+        // fixedAttributeFieldsHtml) - matters here specifically because the
+        // YAML path bypasses the <select> element that would otherwise
+        // make an invalid value impossible to enter in the first place.
+        const matched = fa.options.find((o) => o.toLowerCase() === value.toLowerCase());
+        if (!matched) {
+          return { ok: false, message: t("validation_invalid_fixed_option", { key: fa.key }) };
+        }
+        fields.attributes[fa.key] = matched;
+      }
+    }
+
+    // Kept as one combined name everywhere except this form (storage,
+    // entity naming/slugs, search, CSV/JSON export, ...) - only input/
+    // editing is split into two fields for convenience (e.g. someone
+    // changing their surname after marriage).
+    const name = fields.lastName ? `${fields.firstName} ${fields.lastName}` : fields.firstName;
+    const data = { name, event_type: fields.eventType, date: fields.date };
+    if (fields.icon) data.icon = fields.icon;
+    if (fields.eventType === "deceased" && fields.dateOfDeath) data.date_of_death = fields.dateOfDeath;
+    data.phone_number = fields.phoneNumber || "";
+    // Always included (even "" / {}), so clearing a field or removing every
+    // attribute row actually clears the previously stored value - both
+    // update_event fields are replaced wholesale, not merged (see
+    // manager.py).
+    data.time = fields.time || "";
+    data.attributes = fields.attributes;
+    return { ok: true, data };
+  }
+
+  async function performSave(hass, editingId, fields) {
+    const built = validateAndBuildPayload(fields);
+    if (!built.ok) return built;
     if (editingId) {
-      await callService(hass, "update_event", { event_id: editingId, ...data });
+      await callService(hass, "update_event", { event_id: editingId, ...built.data });
     } else {
-      await callService(hass, "add_event", data);
+      await callService(hass, "add_event", built.data);
     }
     return { ok: true };
+  }
+
+  async function saveEventForm(root, hass, editingId) {
+    return performSave(hass, editingId, readFormFieldsRaw(root));
+  }
+
+  async function saveEventFormYaml(root, hass, editingId) {
+    return performSave(hass, editingId, parseYamlLite(root.querySelector("#f-yaml").value));
   }
 
   // Binds every control inside renderEventFormBody()'s markup. `ctx`:
@@ -840,7 +997,10 @@
     const saveBtn = root.querySelector('[data-action="save"]');
     if (saveBtn)
       saveBtn.addEventListener("click", async () => {
-        const result = await saveEventForm(root, ctx.hass, ctx.editingId);
+        const isYaml = !!root.querySelector("#f-yaml");
+        const result = isYaml
+          ? await saveEventFormYaml(root, ctx.hass, ctx.editingId)
+          : await saveEventForm(root, ctx.hass, ctx.editingId);
         ctx.onSave(result);
       });
     // Delete is a two-step confirm rendered inline in the popup, not the
@@ -871,13 +1031,42 @@
         const removeBtn = newRow.querySelector('[data-action="remove-attr"]');
         if (removeBtn) removeBtn.addEventListener("click", () => newRow.remove());
       });
+
+    // Both directions swap only the `.bd-form` wrapper (via outerHTML, then
+    // rebind everything against the fresh nodes) rather than going through
+    // a card's own _render() - same reasoning as add-attr above: this modal
+    // can be mid-edit, and a full re-render would wipe unrelated in-flight
+    // state (e.g. the modal's own detailsId bookkeeping) the same way the
+    // earlier typing bugs did. `.bd-form` is always the sole child of
+    // `.bd-modal-body` (see renderDetailsOrEditModal/modalWrap), so this
+    // never touches the modal header/title.
+    const editAsYamlBtn = root.querySelector('[data-action="edit-as-yaml"]');
+    if (editAsYamlBtn)
+      editAsYamlBtn.addEventListener("click", () => {
+        const formEl = root.querySelector(".bd-form");
+        if (!formEl) return;
+        const fields = readFormFieldsRaw(root);
+        formEl.outerHTML = renderYamlFormBody(fields, ctx.editingId);
+        bindEventFormEvents(root, ctx);
+        const ta = root.querySelector("#f-yaml");
+        if (ta) ta.focus();
+      });
+    const exitYamlBtn = root.querySelector('[data-action="exit-yaml"]');
+    if (exitYamlBtn)
+      exitYamlBtn.addEventListener("click", () => {
+        const formEl = root.querySelector(".bd-form");
+        if (!formEl) return;
+        const parsed = parseYamlLite(root.querySelector("#f-yaml").value);
+        formEl.outerHTML = renderEventFormBody(fieldsToEditingLike(parsed), ctx.editingId, false);
+        bindEventFormEvents(root, ctx);
+      });
   }
 
   // Shared by the Upcoming and Month cards: a details popup that can flip
   // into the same edit form the Manage card uses, via a "Bewerken" button.
   // `detailsEvent` is the resolved event object (or null - no popup); the
   // returned HTML already includes the modal wrapper.
-  function renderDetailsOrEditModal(detailsEvent, formMode, confirmDelete) {
+  function renderDetailsOrEditModal(detailsEvent, formMode, confirmDelete, dateFormat) {
     if (!detailsEvent) return "";
     const editingId = detailsEvent.entity_id.split(".")[1];
     const title = css`
@@ -887,7 +1076,7 @@
     const body = formMode
       ? renderEventFormBody(detailsEvent, editingId, confirmDelete)
       : css`
-          ${renderDetailsBody(detailsEvent)}
+          ${renderDetailsBody(detailsEvent, dateFormat)}
           <button type="button" class="bd-btn bd-details-edit-btn" data-action="start-edit">
             <ha-icon icon="mdi:pencil"></ha-icon> ${t("action_edit")}
           </button>
@@ -1036,6 +1225,17 @@
         </select>
       </div>
     `;
+  }
+
+  // Shared by all 3 card editors' date-format picker (see formatDate()) -
+  // a function rather than a module-level const since the labels depend on
+  // the current language, only resolvable once a card actually renders.
+  function dateFormatOptions() {
+    return [
+      ["short", t("date_format_short")],
+      ["medium", t("date_format_medium")],
+      ["long", t("date_format_long")],
+    ];
   }
 
   function renderEventTypeCheckboxes(selectedTypes) {
@@ -1259,10 +1459,14 @@
             .bd-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
             .bd-form label { font-size: 12px; color: var(--secondary-text-color); }
             .bd-form input, .bd-form select, .bd-form textarea { padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
+            .bd-form textarea#f-yaml { font-family: var(--code-font-family, monospace); font-size: 13px; white-space: pre; }
             .bd-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
             .bd-attr-row { display: flex; gap: 8px; margin-bottom: 6px; }
             .bd-attr-row input { flex: 1; min-width: 0; }
             .bd-confirm { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding: 12px; border-radius: 6px; background: var(--secondary-background-color); }
+            .bd-backfill { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+            .bd-backfill-pill { font-size: 12px; padding: 4px 10px; border-radius: 12px; border: 1px solid var(--divider-color); cursor: pointer; background: var(--secondary-background-color); color: var(--primary-text-color); }
+            .bd-backfill-pill.active { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
             .bd-filters { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
             .bd-filters input, .bd-filters select { padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
             .bd-filters input { flex: 1; min-width: 120px; }
@@ -1304,7 +1508,7 @@
   // ---------------------------------------------------------------------
   class LifeEventsUpcomingCard extends LifeEventsBaseCard {
     static getStubConfig() {
-      return { title: "Aankomende verjaardagen", days_ahead: 14, event_types: [] };
+      return { title: "Aankomende gebeurtenissen", days_ahead: 14, event_types: [] };
     }
 
     constructor() {
@@ -1349,7 +1553,7 @@
                   ${this._config.show_icon === false ? "" : `<ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>`}
                   <div>
                     <div class="bd-name">${e.name}</div>
-                    <div class="bd-secondary">${formatDate(e.date)} &middot; ${eventTypeLabel(e.eventType)}${becomesText}${deceasedText}</div>
+                    <div class="bd-secondary">${formatDate(e.date, this._config.date_format)} &middot; ${eventTypeLabel(e.eventType)}${becomesText}${deceasedText}</div>
                     ${i === 0 ? `<div class="bd-secondary" id="le-countdown"></div>` : ""}
                   </div>
                 </div>
@@ -1369,7 +1573,7 @@
 
       const bodyHtml = css`
         ${rows}
-        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete)}
+        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete, this._config.date_format)}
       `;
 
       // Most hass ticks are caused by some unrelated entity elsewhere in HA
@@ -1505,6 +1709,7 @@
           <ha-formfield label="${t("editor_collapsible")}">
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
+          ${renderEditorSelect("date_format", t("editor_date_format"), dateFormatOptions(), this._config.date_format || "short")}
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
@@ -1512,6 +1717,7 @@
       this.querySelector("#days_ahead").addEventListener("input", (e) => this._update({ days_ahead: Number(e.target.value) }));
       this.querySelector("#show_icon").addEventListener("change", (e) => this._update({ show_icon: e.target.checked }));
       this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
+      this.querySelector("#date_format").addEventListener("change", (e) => this._update({ date_format: e.target.value }));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
     _update(patch) {
@@ -1612,7 +1818,7 @@
               .map(
                 (e) => css`
                 <tr data-action="details" data-id="${e.entity_id.split(".")[1]}">
-                  <td>${formatDate(e.date)}</td>
+                  <td>${formatDate(e.date, this._config.date_format)}</td>
                   <td>${e.name}</td>
                   <td><span class="bd-type-badge">${eventTypeLabel(e.eventType)}</span></td>
                   <td>${e.eventType === "deceased" ? (e.yearsSinceDeath != null ? t("deceased_years_ago_short", { years: e.yearsSinceDeath }) : "") : e.age ?? ""}</td>
@@ -1631,7 +1837,7 @@
       const bodyHtml = css`
         <div class="bd-months">${buttons}</div>
         ${table}
-        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete)}
+        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete, this._config.date_format)}
       `;
 
       // See LifeEventsUpcomingCard._render() for why this skips the full
@@ -1734,12 +1940,14 @@
           <ha-formfield label="${t("editor_collapsible")}">
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
+          ${renderEditorSelect("date_format", t("editor_date_format"), dateFormatOptions(), this._config.date_format || "short")}
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
       this.querySelector("#columns").addEventListener("input", (e) => this._update({ columns: Number(e.target.value) }));
       this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
+      this.querySelector("#date_format").addEventListener("change", (e) => this._update({ date_format: e.target.value }));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
     _update(patch) {
@@ -1771,6 +1979,7 @@
       this._genderFilter = "";
       this._attrFilterKey = "";
       this._attrFilterValue = "";
+      this._missingAttrFilter = "";
       this._confirmDelete = false;
     }
 
@@ -1841,16 +2050,32 @@
       return [...values].sort();
     }
 
+    // For each configured fixed attribute (see the ensureFixedAttributes
+    // block near the top of this file), how many currently-visible events
+    // are missing it entirely - i.e. would fail the same required-field
+    // check saveEventForm() enforces on the next edit, but nothing
+    // surfaces that until someone happens to open that specific event.
+    // Drives the clickable "backfill" pills in the panel body below;
+    // attributes with nothing missing are left out rather than shown as
+    // "0 ontbrekend".
+    _fixedAttrMissingCounts() {
+      const events = this._baseEvents();
+      return fixedAttrsCache
+        .map((fa) => ({ key: fa.key, count: events.filter((e) => !e.attributes[fa.key]).length }))
+        .filter((m) => m.count > 0);
+    }
+
     _rowsHtml() {
       const q = this._searchQuery.trim().toLowerCase();
       const anyFilterActive =
-        q || this._monthFilter || this._genderFilter || (this._attrFilterKey && this._attrFilterValue);
+        q || this._monthFilter || this._genderFilter || (this._attrFilterKey && this._attrFilterValue) || this._missingAttrFilter;
       if (!anyFilterActive) {
         return `<div class="bd-empty">${t("panel_choose_filter")}</div>`;
       }
 
       const events = this._baseEvents()
         .filter((e) => !q || e.name.toLowerCase().includes(q))
+        .filter((e) => !this._missingAttrFilter || !e.attributes[this._missingAttrFilter])
         .filter((e) => !this._monthFilter || monthOf(e.date) === Number(this._monthFilter))
         .filter(
           (e) => !this._genderFilter || (e.attributes.geslacht || "").trim().toLowerCase() === this._genderFilter
@@ -1871,7 +2096,7 @@
                   <ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>
                   <div>
                     <div class="bd-name">${e.name}</div>
-                    <div class="bd-secondary">${formatDate(e.date)} &middot; <span class="bd-type-badge">${eventTypeLabel(e.eventType)}</span></div>
+                    <div class="bd-secondary">${formatDate(e.date, this._config.date_format)} &middot; <span class="bd-type-badge">${eventTypeLabel(e.eventType)}</span></div>
                     ${Object.keys(e.attributes).length
                       ? `<div class="bd-secondary">${Object.entries(e.attributes)
                           .map(([k, v]) => `${escapeAttr(k)}: ${escapeAttr(v)}`)
@@ -1983,8 +2208,26 @@
 
       const attrKeys = this._knownAttributeKeys();
       const attrValues = this._attrFilterKey ? this._knownAttributeValues(this._attrFilterKey) : [];
+      const missingCounts = this._fixedAttrMissingCounts();
+
+      const backfillHtml = missingCounts.length
+        ? css`
+          <div class="bd-backfill">
+            ${missingCounts
+              .map(
+                (m) => css`
+                <button type="button" class="bd-backfill-pill${this._missingAttrFilter === m.key ? " active" : ""}" data-action="toggle-missing" data-key="${escapeAttr(m.key)}">
+                  ${t("backfill_pill_label", { key: escapeAttr(m.key), count: m.count })}
+                </button>
+              `
+              )
+              .join("")}
+          </div>
+        `
+        : "";
 
       const panelBody = css`
+        ${backfillHtml}
         <div class="bd-filters">
           <input id="f-search" placeholder="${escapeAttr(t("search_placeholder"))}" value="${this._searchQuery}" />
           <select id="f-month-filter">
@@ -2049,6 +2292,19 @@
     _bindEvents() {
       const root = this.shadowRoot;
       this._bindListEvents();
+      // Toggles (clicking the active pill again clears it) rather than a
+      // one-way filter, since there's no other control to clear it from -
+      // unlike the dropdown filters above, which have their own blank
+      // option. A full _render(), not _renderList(): the pill set itself
+      // (and each pill's "active" highlight) lives in the panel body
+      // outside #le-list, same reasoning as the attribute-key filter below.
+      root.querySelectorAll('[data-action="toggle-missing"]').forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const key = btn.dataset.key;
+          this._missingAttrFilter = this._missingAttrFilter === key ? "" : key;
+          this._render();
+        })
+      );
       const addBtn = root.querySelector('[data-action="add"]');
       if (addBtn)
         addBtn.addEventListener("click", () => {
@@ -2269,6 +2525,7 @@
           <ha-formfield label="${t("editor_collapsible")}">
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
+          ${renderEditorSelect("date_format", t("editor_date_format"), dateFormatOptions(), this._config.date_format || "short")}
           ${renderEventTypeCheckboxes(this._config.event_types)}
           <div class="le-editor-label">${t("fixed_attrs_section_title")}</div>
           <div class="le-hint">${t("fixed_attrs_section_hint")}</div>
@@ -2281,6 +2538,7 @@
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
       this.querySelector("#display_mode").addEventListener("change", (e) => this._update({ display_mode: e.target.value }));
       this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
+      this.querySelector("#date_format").addEventListener("change", (e) => this._update({ date_format: e.target.value }));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
       bindFixedAttrsSection(this, this._hass);
     }

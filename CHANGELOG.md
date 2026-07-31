@@ -3,6 +3,38 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.3-beta.5
+
+### Added
+- **"Edit as YAML" in the event add/edit popup** (Manage card, and the
+  Upcoming/Month cards' "Bewerken" flow - all three share the same form).
+  Not a general YAML parser/editor (no external dependency): a fixed,
+  schema-specific set of technical field names (`firstname`, `lastname`,
+  `type`, `date`, `time`, `date_of_death`, `icon`, `phone`, `attributes`),
+  the same "raw/technical, not translated" contract HA's own "Edit in
+  YAML" uses elsewhere. Validation (required fields, required/valid fixed
+  attributes) applies identically whether you save from the normal form
+  or from YAML.
+- **Fixed-attribute backfill overview on the Manage card.** For any
+  install-wide required attribute (e.g. Geslacht) that predates being
+  made required, or was imported without it, a small pill now shows how
+  many currently-visible events are still missing it (e.g. "geslacht: 2
+  ontbrekend") - click it to filter straight to just those, click again
+  to clear. Makes an existing gap ("which events still need this filled
+  in?") visible without hunting through the list by hand.
+- **Per-card date-format picker** on all three cards' editors: short
+  (`dd-mm-jjjj`, unchanged default), medium (`dd maand jjjj`) or long
+  (`weekdag dd maand`), the latter two locale-correct via
+  `Intl.DateTimeFormat` in nl/en/de/fr - same technique already used for
+  the weekday name added in 0.0.3-beta.4.
+- Renamed the Upcoming card's default title from "Aankomende
+  verjaardagen" to "Aankomende gebeurtenissen" - it has always covered
+  anniversaries and remembrances too, not just birthdays.
+
+Verified with 3 new runtime tests (date-format-test.html, backfill-
+test.html, yaml-edit-test.html - 32 checks total) plus the full existing
+regression suite (124 checks, all still passing).
+
 ## 0.0.3-beta.4
 
 ### Fixed

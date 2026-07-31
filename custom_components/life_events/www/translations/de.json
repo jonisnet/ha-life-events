@@ -85,5 +85,14 @@
   "action_add_fixed_attr": "+ Festes Attribut hinzufügen",
   "action_save_fixed_attrs": "Feste Attribute speichern",
   "deceased_years_ago": "Vor {years} Jahren verstorben",
-  "deceased_years_ago_short": "vor {years} Jahren"
+  "deceased_years_ago_short": "vor {years} Jahren",
+  "backfill_pill_label": "{key}: {count} fehlend",
+  "editor_date_format": "Datumsformat",
+  "date_format_short": "tt-mm-jjjj",
+  "date_format_medium": "tt Monat jjjj",
+  "date_format_long": "Wochentag tt Monat",
+  "action_edit_yaml": "Als YAML bearbeiten",
+  "action_edit_form": "Zurück zum Formular",
+  "yaml_edit_hint": "Technische Feldnamen (Englisch), nicht übersetzt - wie die YAML-Bearbeitung an anderer Stelle in Home Assistant.",
+  "validation_invalid_fixed_option": "{key} muss einer der zulässigen Werte sein."
 }
