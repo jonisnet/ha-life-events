@@ -169,6 +169,24 @@ async def test_link_marriage_rejects_unknown_event_id(hass: HomeAssistant) -> No
         )
 
 
+async def test_updating_an_unrelated_field_does_not_clear_the_marriage_link(hass: HomeAssistant) -> None:
+    """update_event must preserve spouse_id/marriage_date like every other field it doesn't touch."""
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(DOMAIN, "update_event", {"event_id": "cees", "icon": "mdi:account"}, blocking=True)
+    await hass.async_block_till_done()
+
+    cees = hass.states.get("life_events.cees")
+    assert cees.attributes["spouse_id"] == "nicole"
+    assert cees.attributes["marriage_date"] == "2012-02-14"
+
+
 async def test_link_marriage_rejects_marrying_self(hass: HomeAssistant) -> None:
     await _setup_entry(hass)
     await _add_person(hass, "Cees", "1980-01-01")

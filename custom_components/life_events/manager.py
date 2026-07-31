@@ -165,6 +165,14 @@ class LifeEventsManager:
             "icon": fields.get("icon", current.icon),
             "phone_number": fields.get("phone_number", current.phone_number),
             "time": fields.get("time", current.time),
+            # Never caller-settable (deliberately excluded from
+            # UPDATE_EVENT_SCHEMA - see the Event.spouse_id/marriage_date
+            # comment in models.py), so always preserved from `current`
+            # rather than read from `fields` - an update to an unrelated
+            # field (e.g. marking someone deceased) must not silently wipe
+            # an existing marriage link.
+            "spouse_id": current.spouse_id,
+            "marriage_date": current.marriage_date,
             "attributes": fields.get("attributes", current.attributes),
         }
         self._check_required_attributes(merged["attributes"])
@@ -201,7 +209,7 @@ class LifeEventsManager:
 
     # -- Marriage linking --------------------------------------------------
 
-    def _clear_stale_marriage_link(self, event_id: str) -> None:
+    def _clear_stale_marriage_link(self, event_id: str) -> str | None:
         """If event_id is currently linked, clear that link before relinking.
 
         The OTHER side is only cleared too if that spouse is still alive -
@@ -209,17 +217,23 @@ class LifeEventsManager:
         since died, their own record is left untouched (their marriage
         history stays factually intact; only event_id itself moves on to
         the new marriage) - see the "widow(er) remarries" case in the
-        roadmap this implements.
+        roadmap this implements. Returns the freed spouse's id (if any),
+        so the caller can push a state update to that entity too - its
+        Event object is mutated here, but nothing re-reads it otherwise.
         """
         event = self.events.get(event_id)
         if not event or not event.spouse_id:
-            return
-        old_spouse = self.events.get(event.spouse_id)
+            return None
+        old_spouse_id = event.spouse_id
+        old_spouse = self.events.get(old_spouse_id)
+        freed_id = None
         if old_spouse and old_spouse.event_type != EVENT_TYPE_DECEASED:
             old_spouse.spouse_id = None
             old_spouse.marriage_date = None
+            freed_id = old_spouse_id
         event.spouse_id = None
         event.marriage_date = None
+        return freed_id
 
     async def async_link_marriage(self, event_id: str, spouse_id: str, marriage_date: date) -> None:
         """Marry two existing persons, symmetrically linking both records."""
@@ -234,8 +248,8 @@ class LifeEventsManager:
         # a direct service call could ask to link someone already linked
         # elsewhere - unwind any existing link on either side first so the
         # result is never a 3-way inconsistency.
-        self._clear_stale_marriage_link(event_id)
-        self._clear_stale_marriage_link(spouse_id)
+        freed_a = self._clear_stale_marriage_link(event_id)
+        freed_b = self._clear_stale_marriage_link(spouse_id)
 
         self.events[event_id].spouse_id = spouse_id
         self.events[event_id].marriage_date = marriage_date
@@ -243,7 +257,12 @@ class LifeEventsManager:
         self.events[spouse_id].marriage_date = marriage_date
 
         await self.store.async_save(list(self.events.values()))
-        for eid in (event_id, spouse_id):
+        affected = {event_id, spouse_id}
+        if freed_a:
+            affected.add(freed_a)
+        if freed_b:
+            affected.add(freed_b)
+        for eid in affected:
             entity = self._entities.get(eid)
             if entity:
                 entity.async_write_ha_state()
