@@ -3,6 +3,24 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.10 — unreleased
+
+### Fixed
+- Selecting text inside the edit popup (e.g. click-drag or double-click to
+  select a word in a field) could close the whole popup mid-selection.
+  Root cause: `bindModalBackdrops()`'s click-outside-to-close only checked
+  where the `click` event's target landed - if a text-selection drag
+  started inside the modal but the mouseup ended up over the backdrop's
+  padding, the browser still reports that as a click on the backdrop,
+  which was indistinguishable from a genuine click-outside. Fixed by also
+  requiring the preceding `mousedown` to have landed on the backdrop
+  itself before treating a `click` as click-outside - a selection drag
+  starting inside the modal no longer counts, but a real click-outside
+  (mousedown + click both on the backdrop) still closes/cancels exactly
+  as before. Verified with a new 4-check runtime test
+  (`logo-drafts/modal-text-selection-test.html`) plus the full existing
+  regression suite (91 checks total, all still passing).
+
 ## 0.0.2-beta.9
 
 ### Added

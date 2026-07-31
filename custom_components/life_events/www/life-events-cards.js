@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.9 loaded");
+  console.info("Life Events cards: v0.0.2-beta.10 loaded");
 
   const DOMAIN = "life_events";
 
@@ -330,10 +330,23 @@
 
   // Click-outside-to-close: delegates to the modal header's own close
   // button rather than duplicating close logic here.
+  //
+  // Requires BOTH the mousedown AND the click to land directly on the
+  // backdrop, not just the click. A plain `click` check alone also fires
+  // when the user starts a text selection drag *inside* the modal (e.g.
+  // selecting text in a field near the edge) and the mouseup happens to
+  // land on the backdrop's padding - the browser still reports that as a
+  // "click" on the backdrop, silently closing the popup mid-selection.
   function bindModalBackdrops(root) {
     root.querySelectorAll(".bd-modal-backdrop").forEach((backdrop) => {
+      let downOnBackdrop = false;
+      backdrop.addEventListener("mousedown", (e) => {
+        downOnBackdrop = e.target === backdrop;
+      });
       backdrop.addEventListener("click", (e) => {
-        if (e.target !== backdrop) return;
+        const shouldClose = downOnBackdrop && e.target === backdrop;
+        downOnBackdrop = false;
+        if (!shouldClose) return;
         const closeBtn = backdrop.querySelector(".bd-modal-header [data-action]");
         if (closeBtn) closeBtn.click();
       });
