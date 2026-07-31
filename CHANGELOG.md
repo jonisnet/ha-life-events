@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.11 — unreleased
+## 0.0.2-beta.11
 
 ### Added
 - **Automatic language detection for both the integration and the cards.**
