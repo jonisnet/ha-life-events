@@ -3,6 +3,12 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.3-beta.1 — unreleased
+
+Version bump only, no functional changes beyond 0.0.2-beta.13 - starts the
+0.0.3 development line (`0.0.x-beta.N`, beta counter restarting at `beta.1`
+for the new `x`).
+
 ## 0.0.2-beta.13
 
 ### Added
