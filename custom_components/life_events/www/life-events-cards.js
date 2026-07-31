@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.8 loaded");
+  console.info("Life Events cards: v0.0.2-beta.9 loaded");
 
   const DOMAIN = "life_events";
 
@@ -282,6 +282,33 @@
   function monthOf(iso) {
     if (!iso) return null;
     return parseInt(iso.split("-")[1], 10);
+  }
+
+  // Month card's sortable table columns. `dir` is 1 (asc) or -1 (desc);
+  // each case decides for itself whether/how it applies dir, so a column
+  // like "age" can keep missing values (deceased events have none) sorted
+  // last regardless of direction instead of flipping to the top on desc.
+  const MONTH_TABLE_COLUMNS = { date: "Datum", name: "Naam", type: "Type", age: "Leeftijd" };
+
+  function compareByColumn(a, b, column, dir) {
+    switch (column) {
+      case "name":
+        return a.name.localeCompare(b.name) * dir;
+      case "type":
+        return (EVENT_TYPE_LABELS[a.eventType] || a.eventType).localeCompare(EVENT_TYPE_LABELS[b.eventType] || b.eventType) * dir;
+      case "age": {
+        const av = a.eventType === "deceased" ? null : a.age;
+        const bv = b.eventType === "deceased" ? null : b.age;
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        return (av - bv) * dir;
+      }
+      case "date":
+        return (parseInt(a.date.split("-")[2], 10) - parseInt(b.date.split("-")[2], 10)) * dir;
+      default:
+        return 0;
+    }
   }
 
   // Shared by all three cards: a read-only "details" popup on the
@@ -725,12 +752,29 @@
 
     _shell(bodyHtml) {
       const title = this._config.title;
+      const collapsible = !!this._config.collapsible;
+      const collapsed = collapsible && !!this._collapsed;
+      // Collapsible cards build their own header (so a toggle arrow can go
+      // in it) instead of using <ha-card header="...">, which only takes a
+      // plain string. Non-collapsible cards are untouched - same native
+      // header as always, no visual change.
+      const headerHtml = collapsible
+        ? css`
+            <div class="bd-card-header" data-action="toggle-collapse">
+              <span>${title ? escapeAttr(title) : ""}</span>
+              <ha-icon icon="${collapsed ? "mdi:chevron-down" : "mdi:chevron-up"}"></ha-icon>
+            </div>
+          `
+        : "";
       this.shadowRoot.innerHTML = css`
-        <ha-card ${title ? `header="${title}"` : ""}>
+        <ha-card ${!collapsible && title ? `header="${title}"` : ""}>
           <style>
+            .bd-card-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 0; cursor: pointer; user-select: none; font-size: 1.2em; font-weight: 400; }
             .bd-body { padding: 0 16px 16px; }
             table.bd-table { width: 100%; border-collapse: collapse; font-size: 14px; }
             table.bd-table th { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--divider-color); color: var(--secondary-text-color); }
+            table.bd-table th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
+            table.bd-table th[data-sort]:hover { color: var(--primary-text-color); }
             table.bd-table td { padding: 4px 8px; border-bottom: 1px solid var(--divider-color); }
             .bd-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--divider-color); }
             .bd-row:last-child { border-bottom: none; }
@@ -772,9 +816,16 @@
             .bd-section-title { font-weight: 600; margin: 16px 0 4px; }
             .bd-type-badge { font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--secondary-background-color); color: var(--secondary-text-color); }
           </style>
-          <div class="bd-body">${bodyHtml}</div>
+          ${headerHtml}
+          <div class="bd-body" style="${collapsed ? "display:none;" : ""}">${bodyHtml}</div>
         </ha-card>
       `;
+      if (collapsible) {
+        this.shadowRoot.querySelector('[data-action="toggle-collapse"]').addEventListener("click", () => {
+          this._collapsed = !this._collapsed;
+          this._render();
+        });
+      }
     }
   }
 
@@ -932,12 +983,16 @@
           <ha-formfield label="Toon icoon">
             <ha-switch id="show_icon" ${this._config.show_icon !== false ? "checked" : ""}></ha-switch>
           </ha-formfield>
+          <ha-formfield label="Inklapbaar (pijlknop in de kaart)">
+            <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
+          </ha-formfield>
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
       this.querySelector("#days_ahead").addEventListener("input", (e) => this._update({ days_ahead: Number(e.target.value) }));
       this.querySelector("#show_icon").addEventListener("change", (e) => this._update({ show_icon: e.target.checked }));
+      this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
     _update(patch) {
@@ -962,6 +1017,39 @@
       this._detailsId = null;
       this._formMode = false;
       this._confirmDelete = false;
+      // Table sort state. `_sortOrder` is priority order (first = primary
+      // sort key), capped at 2: activating a 3rd column evicts the oldest.
+      this._sortState = {};
+      this._sortOrder = [];
+    }
+
+    // Cycles a column through asc -> desc -> off -> asc ... Newly-activated
+    // columns are appended to _sortOrder (lowest priority); deactivated
+    // columns are removed. Activating beyond 2 evicts the oldest.
+    _cycleSort(column) {
+      const current = this._sortState[column];
+      const next = current === undefined ? "asc" : current === "asc" ? "desc" : undefined;
+      if (next === undefined) {
+        delete this._sortState[column];
+        this._sortOrder = this._sortOrder.filter((c) => c !== column);
+      } else {
+        if (current === undefined) {
+          this._sortOrder.push(column);
+          if (this._sortOrder.length > 2) {
+            delete this._sortState[this._sortOrder.shift()];
+          }
+        }
+        this._sortState[column] = next;
+      }
+      this._render();
+    }
+
+    _sortIndicator(column) {
+      const state = this._sortState[column];
+      if (!state) return "";
+      const arrow = state === "asc" ? "▲" : "▼";
+      const priority = this._sortOrder.length === 2 ? String(this._sortOrder.indexOf(column) + 1) : "";
+      return ` ${arrow}${priority}`;
     }
 
     _render() {
@@ -976,14 +1064,30 @@
         return `<button class="bd-month-btn${selected ? " selected" : ""}" data-month="${monthNr}">${label}${count ? ` (${count})` : ""}</button>`;
       }).join("");
 
+      const sortOrder = this._sortOrder;
       const monthEvents = events
         .filter((e) => monthOf(e.date) === this._selectedMonth)
-        .sort((a, b) => parseInt(a.date.split("-")[2], 10) - parseInt(b.date.split("-")[2], 10));
+        .sort((a, b) => {
+          if (sortOrder.length === 0) {
+            // Default (nothing clicked yet): ascending by day of month.
+            return compareByColumn(a, b, "date", 1);
+          }
+          for (const col of sortOrder) {
+            const dir = this._sortState[col] === "desc" ? -1 : 1;
+            const cmp = compareByColumn(a, b, col, dir);
+            if (cmp !== 0) return cmp;
+          }
+          return 0;
+        });
 
       const table = monthEvents.length
         ? css`
           <table class="bd-table">
-            <tr><th>Datum</th><th>Naam</th><th>Type</th><th>Leeftijd</th></tr>
+            <tr>
+              ${Object.entries(MONTH_TABLE_COLUMNS)
+                .map(([col, label]) => `<th data-sort="${col}">${label}${this._sortIndicator(col)}</th>`)
+                .join("")}
+            </tr>
             ${monthEvents
               .map(
                 (e) => css`
@@ -1015,6 +1119,9 @@
           this._selectedMonth = Number(btn.dataset.month);
           this._render();
         });
+      });
+      this.shadowRoot.querySelectorAll("th[data-sort]").forEach((th) => {
+        th.addEventListener("click", () => this._cycleSort(th.dataset.sort));
       });
       this.shadowRoot.querySelectorAll('[data-action="details"]').forEach((row) =>
         row.addEventListener("click", () => {
@@ -1085,11 +1192,15 @@
         <div class="le-editor">
           ${renderEditorField("title", "Titel", this._config.title ?? "")}
           ${renderEditorField("columns", "Aantal kolommen (maandknoppen)", this._config.columns ?? 3, 'type="number" min="1" max="6"')}
+          <ha-formfield label="Inklapbaar (pijlknop in de kaart)">
+            <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
+          </ha-formfield>
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
       this.querySelector("#columns").addEventListener("input", (e) => this._update({ columns: Number(e.target.value) }));
+      this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
     _update(patch) {
@@ -1566,11 +1677,15 @@
             ],
             this._config.display_mode || "full"
           )}
+          <ha-formfield label="Inklapbaar (pijlknop in de kaart)">
+            <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
+          </ha-formfield>
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
       this.querySelector("#display_mode").addEventListener("change", (e) => this._update({ display_mode: e.target.value }));
+      this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
     _update(patch) {

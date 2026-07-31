@@ -3,6 +3,27 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.9 — unreleased
+
+### Added
+- All three cards can now be made **collapsible** (checkbox in the visual
+  editor, off by default): a chevron arrow appears in the card header to
+  fold/unfold the body. Non-collapsible cards are completely unchanged
+  (still use the native `ha-card header="..."`); opting in swaps to a
+  custom header just for that card so the arrow has somewhere to live.
+- The **Month card's table headers** (Datum, Naam, Type, Leeftijd) are now
+  clickable to sort: each click cycles A-Z → Z-A → uit (Naam/Type),
+  1-150 → 150-1 → uit (Leeftijd), or eerste → laatste → uit (Datum). Up to
+  **2 columns** can be active at once (shown as a small priority number
+  when both are); activating a 3rd evicts the oldest. With nothing
+  clicked, falls back to the previous default (ascending by day). Ages
+  without a value (deceased events) always sort last regardless of
+  direction.
+
+Verified with a dedicated 21-check runtime browser test
+(`logo-drafts/collapsible-and-sort-test.html`), plus the full existing
+66-check regression suite across all other test harnesses.
+
 ## 0.0.2-beta.8
 
 ### Fixed
