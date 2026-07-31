@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.10 — unreleased
+## 0.0.2-beta.10
 
 ### Fixed
 - Selecting text inside the edit popup (e.g. click-drag or double-click to
