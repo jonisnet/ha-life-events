@@ -3,6 +3,29 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.3-beta.4
+
+### Fixed
+- **Fixed-attribute dropdowns (e.g. Geslacht) failed to pre-select a stored
+  value that only differed in casing** (e.g. a value stored as "Vrouw"
+  before the dropdown existed, or imported from elsewhere, wouldn't
+  pre-select "vrouw"), silently falling back to the blank placeholder even
+  though a value was actually saved. Matching is now case-insensitive; the
+  dropdown's own defined casing is what gets saved going forward.
+- Removed a duplicate "Vandaag!" on the Upcoming card: today's events
+  already show it in the badge on the right, so the countdown line on the
+  left is now left blank for those rows instead of repeating it.
+
+### Changed
+- The "wordt X" inline age text on the Upcoming card now bolds the age
+  number and adds the locale-correct weekday name of the upcoming
+  occurrence (e.g. "wordt **105** op donderdag"), via
+  `Intl.DateTimeFormat(..., { weekday: "long" })` in nl/en/de/fr.
+
+Verified with the full existing regression suite plus a new 3-check test
+for the bold age/weekday text and an extra case-insensitive-prefill check
+added to the fixed-attributes test (139 checks total, all passing).
+
 ## 0.0.3-beta.3
 
 ### Fixed

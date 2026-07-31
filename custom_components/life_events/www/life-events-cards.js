@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.3-beta.3 loaded");
+  console.info("Life Events cards: v0.0.3-beta.4 loaded");
 
   const DOMAIN = "life_events";
 
@@ -78,7 +78,7 @@
     label_date_of_death: "Datum van overlijden",
     label_phone: "Telefoonnummer",
     label_import_export: "Import / export",
-    inline_becomes: "wordt {age}",
+    inline_becomes: "wordt <b>{age}</b> op {weekday}",
     countdown_today: "Vandaag!",
     countdown_format: "Nog {days} dagen {hours} uur {minutes} min {seconds} sec",
     upcoming_empty: "Geen aankomende gebeurtenissen in de komende {days} dagen.",
@@ -205,8 +205,19 @@
   // so nothing else can change it mid-render.
   let currentTranslations = TRANSLATIONS_NL;
 
+  // Kept alongside currentTranslations - Intl.DateTimeFormat needs an
+  // actual BCP-47 locale tag (for locale-correct weekday/month names via
+  // the browser's own data, not a hand-maintained table like the rest of
+  // this file's i18n), not the translation dictionary object.
+  let currentLangCode = "nl";
+
   function setLangFor(hass) {
-    currentTranslations = translationsCache[resolveLang(hass)] || TRANSLATIONS_NL;
+    currentLangCode = resolveLang(hass);
+    currentTranslations = translationsCache[currentLangCode] || TRANSLATIONS_NL;
+  }
+
+  function weekdayName(date) {
+    return new Intl.DateTimeFormat(currentLangCode, { weekday: "long" }).format(date);
   }
 
   // Looks up `key` in the current language, falling back to Dutch (always
@@ -468,7 +479,10 @@
 
   function formatCountdown(target) {
     const diffMs = target - new Date();
-    if (diffMs <= 0) return t("countdown_today");
+    // Blank rather than "Vandaag!" here: the badge on the right of the row
+    // (see LifeEventsUpcomingCard._render()) already shows that, and
+    // showing it a second time on this line too read as duplicated.
+    if (diffMs <= 0) return "";
     const totalSeconds = Math.floor(diffMs / 1000);
     const days = Math.floor(totalSeconds / 86400);
     const hours = Math.floor((totalSeconds % 86400) / 3600);
@@ -654,12 +668,20 @@
       .map((fa) => {
         const value = editing && editing.attributes ? editing.attributes[fa.key] || "" : "";
         if (fa.options && fa.options.length) {
+          // Case-insensitive: data entered before this attribute became a
+          // fixed dropdown (or imported from elsewhere) may not match an
+          // option's exact casing (e.g. stored "Man" vs. a defined option
+          // "man") - match loosely so it still pre-fills instead of
+          // silently showing blank despite a value actually being stored.
+          // Saving again normalizes it to the option's defined casing,
+          // same as if the user had picked it by hand.
+          const matched = fa.options.find((o) => o.toLowerCase() === value.toLowerCase());
           return css`
             <label>${escapeAttr(fa.key)} *</label>
             <select data-fixed-key="${escapeAttr(fa.key)}">
-              <option value="" ${value ? "" : "selected"} disabled>${t("fixed_attr_choose")}</option>
+              <option value="" ${matched ? "" : "selected"} disabled>${t("fixed_attr_choose")}</option>
               ${fa.options
-                .map((o) => `<option value="${escapeAttr(o)}" ${o === value ? "selected" : ""}>${escapeAttr(o)}</option>`)
+                .map((o) => `<option value="${escapeAttr(o)}" ${o === matched ? "selected" : ""}>${escapeAttr(o)}</option>`)
                 .join("")}
             </select>
           `;
@@ -1310,21 +1332,31 @@
 
       const rows = events.length
         ? events
-            .map(
-              (e, i) => css`
+            .map((e, i) => {
+              // The weekday the upcoming occurrence itself falls on this
+              // year (not the weekday the person was originally born on).
+              const becomesText =
+                e.eventType !== "deceased" && e.age != null
+                  ? ` &middot; ${t("inline_becomes", { age: e.age, weekday: weekdayName(nextOccurrenceDate(e.date)) })}`
+                  : "";
+              const deceasedText =
+                e.eventType === "deceased" && e.yearsSinceDeath != null
+                  ? ` &middot; ${t("deceased_years_ago_short", { years: e.yearsSinceDeath })}`
+                  : "";
+              return css`
               <div class="bd-row" data-action="details" data-id="${e.entity_id.split(".")[1]}">
                 <div class="bd-left">
                   ${this._config.show_icon === false ? "" : `<ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>`}
                   <div>
                     <div class="bd-name">${e.name}</div>
-                    <div class="bd-secondary">${formatDate(e.date)} &middot; ${eventTypeLabel(e.eventType)}${e.eventType !== "deceased" && e.age != null ? ` &middot; ${t("inline_becomes", { age: e.age })}` : ""}${e.eventType === "deceased" && e.yearsSinceDeath != null ? ` &middot; ${t("deceased_years_ago_short", { years: e.yearsSinceDeath })}` : ""}</div>
+                    <div class="bd-secondary">${formatDate(e.date)} &middot; ${eventTypeLabel(e.eventType)}${becomesText}${deceasedText}</div>
                     ${i === 0 ? `<div class="bd-secondary" id="le-countdown"></div>` : ""}
                   </div>
                 </div>
                 <div class="bd-badge">${e.days === 0 ? t("countdown_today") : e.days}</div>
               </div>
-            `
-            )
+            `;
+            })
             .join("")
         : `<div class="bd-empty">${t("upcoming_empty", { days: daysAhead })}</div>`;
 

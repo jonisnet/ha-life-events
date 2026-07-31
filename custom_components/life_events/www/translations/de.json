@@ -12,7 +12,7 @@
   "label_date_of_death": "Sterbedatum",
   "label_phone": "Telefonnummer",
   "label_import_export": "Import / Export",
-  "inline_becomes": "wird {age}",
+  "inline_becomes": "wird <b>{age}</b> am {weekday}",
   "countdown_today": "Heute!",
   "countdown_format": "Noch {days} Tage {hours} Std {minutes} Min {seconds} Sek",
   "upcoming_empty": "Keine bevorstehenden Ereignisse in den nächsten {days} Tagen.",

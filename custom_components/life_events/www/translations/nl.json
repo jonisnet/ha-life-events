@@ -12,7 +12,7 @@
   "label_date_of_death": "Datum van overlijden",
   "label_phone": "Telefoonnummer",
   "label_import_export": "Import / export",
-  "inline_becomes": "wordt {age}",
+  "inline_becomes": "wordt <b>{age}</b> op {weekday}",
   "countdown_today": "Vandaag!",
   "countdown_format": "Nog {days} dagen {hours} uur {minutes} min {seconds} sec",
   "upcoming_empty": "Geen aankomende gebeurtenissen in de komende {days} dagen.",

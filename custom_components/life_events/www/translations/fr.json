@@ -12,7 +12,7 @@
   "label_date_of_death": "Date de décès",
   "label_phone": "Numéro de téléphone",
   "label_import_export": "Import / export",
-  "inline_becomes": "aura {age} ans",
+  "inline_becomes": "aura <b>{age}</b> ans le {weekday}",
   "countdown_today": "Aujourd'hui !",
   "countdown_format": "Encore {days} j {hours} h {minutes} min {seconds} s",
   "upcoming_empty": "Aucun événement à venir dans les {days} prochains jours.",
