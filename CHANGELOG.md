@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.3-beta.3 — unreleased
+## 0.0.3-beta.3
 
 ### Fixed
 - **Typing in a card's visual editor (e.g. the Titel field) could lose the
