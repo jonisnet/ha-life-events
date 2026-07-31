@@ -113,6 +113,22 @@ class EventEntity(Entity):
             days_until_death_anniversary = event.days_until_next_death_anniversary(today)
             if days_until_death_anniversary is not None:
                 attrs["days_until_death_anniversary"] = days_until_death_anniversary
+        if event.spouse_id and event.marriage_date:
+            attrs["spouse_id"] = event.spouse_id
+            spouse = self._manager.events.get(event.spouse_id)
+            # Resolved here (not left to the frontend to look up its own
+            # entity_id) since the manager already has every event in
+            # memory - one less hass.states lookup for every card that
+            # wants to show "married to X since Y".
+            if spouse:
+                attrs["spouse_name"] = spouse.name
+            attrs["marriage_date"] = event.marriage_date.isoformat()
+            days_until_marriage_anniversary = event.days_until_next_marriage_anniversary(today)
+            if days_until_marriage_anniversary is not None:
+                attrs["days_until_marriage_anniversary"] = days_until_marriage_anniversary
+            years_at_next_marriage_anniversary = event.years_at_next_marriage_anniversary(today)
+            if years_at_next_marriage_anniversary is not None:
+                attrs["years_at_next_marriage_anniversary"] = years_at_next_marriage_anniversary
         if event.phone_number:
             attrs["phone_number"] = event.phone_number
         if event.time:

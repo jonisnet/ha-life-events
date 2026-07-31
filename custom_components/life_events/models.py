@@ -14,8 +14,10 @@ from .const import (
     CONF_EVENT_TYPE,
     CONF_ICON,
     CONF_ID,
+    CONF_MARRIAGE_DATE,
     CONF_NAME,
     CONF_PHONE_NUMBER,
+    CONF_SPOUSE_ID,
     CONF_TIME,
     DEFAULT_ICONS,
     EVENT_TYPE_BIRTHDAY,
@@ -45,6 +47,13 @@ class Event:
     icon: str | None = None
     phone_number: str | None = None
     time: str | None = None
+    # Marriage link - see CONF_SPOUSE_ID/CONF_MARRIAGE_DATE in const.py.
+    # Only ever set/cleared as a pair via LifeEventsManager's
+    # async_link_marriage()/async_unlink_marriage(), never through plain
+    # add_event/update_event (kept out of ADD/UPDATE_EVENT_SCHEMA in
+    # services.py on purpose, so a caller can't desync one side of a link).
+    spouse_id: str | None = None
+    marriage_date: date | None = None
     attributes: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -62,6 +71,8 @@ class Event:
         icon: str | None = None,
         phone_number: str | None = None,
         time: str | None = None,
+        spouse_id: str | None = None,
+        marriage_date: date | None = None,
         attributes: dict[str, str] | None = None,
     ) -> "Event":
         return cls(
@@ -73,6 +84,8 @@ class Event:
             icon=icon,
             phone_number=phone_number or None,
             time=time or None,
+            spouse_id=spouse_id or None,
+            marriage_date=marriage_date,
             attributes=dict(attributes or {}),
         )
 
@@ -86,6 +99,8 @@ class Event:
             CONF_DATE_OF_DEATH: self.date_of_death.isoformat() if self.date_of_death else None,
             CONF_ICON: self.icon,
             CONF_PHONE_NUMBER: self.phone_number,
+            CONF_SPOUSE_ID: self.spouse_id,
+            CONF_MARRIAGE_DATE: self.marriage_date.isoformat() if self.marriage_date else None,
             CONF_ATTRIBUTES: dict(self.attributes),
         }
 
@@ -100,6 +115,8 @@ class Event:
             icon=raw.get(CONF_ICON),
             phone_number=raw.get(CONF_PHONE_NUMBER) or None,
             time=raw.get(CONF_TIME) or None,
+            spouse_id=raw.get(CONF_SPOUSE_ID) or None,
+            marriage_date=date.fromisoformat(raw[CONF_MARRIAGE_DATE]) if raw.get(CONF_MARRIAGE_DATE) else None,
             attributes=dict(raw.get(CONF_ATTRIBUTES) or {}),
         )
 
@@ -130,6 +147,37 @@ class Event:
         if next_occurrence < today:
             next_occurrence = next_occurrence.replace(year=today.year + 1)
         return (next_occurrence - today).days
+
+    def days_until_next_marriage_anniversary(self, today: date) -> int | None:
+        """Days until the next wedding anniversary, or None if unmarried.
+
+        Mirrors days_until_next_occurrence's forward-looking rollover logic,
+        sourced from marriage_date - lets a married person's anniversary be
+        surfaced as its own upcoming occasion, same pattern as
+        days_until_next_death_anniversary above.
+        """
+        if not self.marriage_date:
+            return None
+        next_occurrence = date(today.year, self.marriage_date.month, self.marriage_date.day)
+        if next_occurrence < today:
+            next_occurrence = next_occurrence.replace(year=today.year + 1)
+        return (next_occurrence - today).days
+
+    def years_at_next_marriage_anniversary(self, today: date) -> int | None:
+        """How many years married at the next anniversary, or None if unmarried.
+
+        Mirrors years_at_next_occurrence's forward-looking rollover logic
+        (ticks over ON the anniversary itself), sourced from marriage_date -
+        the "25th anniversary" number shown alongside the occasion, and what
+        a future per-language nickname (25=silver, 50=golden, ...) would key
+        off of.
+        """
+        if not self.marriage_date:
+            return None
+        next_occurrence = date(today.year, self.marriage_date.month, self.marriage_date.day)
+        if next_occurrence < today:
+            next_occurrence = next_occurrence.replace(year=today.year + 1)
+        return next_occurrence.year - self.marriage_date.year
 
     def years_since_death(self, today: date) -> int | None:
         """Complete years since date_of_death, counting up on each anniversary.

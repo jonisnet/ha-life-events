@@ -38,6 +38,14 @@
     "get_fixed_attributes": {
       "name": "Feste Attribute abrufen",
       "description": "Das aktuelle Schema der festen (erforderlichen) benutzerdefinierten Attribute zurückgeben."
+    },
+    "link_marriage": {
+      "name": "Ehe verknüpfen",
+      "description": "Zwei bestehende Personen heiraten und beide Datensätze symmetrisch mit einem gemeinsamen Jubiläumsdatum verknüpfen."
+    },
+    "unlink_marriage": {
+      "name": "Ehe trennen",
+      "description": "Scheidung: die Eheverknüpfung auf beiden Seiten symmetrisch entfernen."
     }
   }
 }

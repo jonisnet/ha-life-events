@@ -80,6 +80,56 @@ def test_days_until_next_death_anniversary_none_without_date_of_death():
     assert event.days_until_next_death_anniversary(date(2026, 6, 1)) is None
 
 
+def test_days_until_next_marriage_anniversary_wraps_to_next_year():
+    event = Event.create(
+        name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", marriage_date=date(2012, 2, 14)
+    )
+    today = date(2026, 6, 1)
+    assert event.days_until_next_marriage_anniversary(today) == (date(2027, 2, 14) - today).days
+
+
+def test_days_until_next_marriage_anniversary_today_is_zero():
+    event = Event.create(
+        name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", marriage_date=date(2012, 2, 14)
+    )
+    assert event.days_until_next_marriage_anniversary(date(2026, 2, 14)) == 0
+
+
+def test_days_until_next_marriage_anniversary_none_when_unmarried():
+    event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22))
+    assert event.days_until_next_marriage_anniversary(date(2026, 6, 1)) is None
+
+
+def test_years_at_next_marriage_anniversary():
+    event = Event.create(
+        name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", marriage_date=date(2012, 2, 14)
+    )
+    # Before this year's Feb 14 anniversary -> still counting toward it.
+    assert event.years_at_next_marriage_anniversary(date(2026, 1, 1)) == 2026 - 2012
+    # After it -> already rolled over to next year's count.
+    assert event.years_at_next_marriage_anniversary(date(2026, 6, 1)) == 2027 - 2012
+
+
+def test_years_at_next_marriage_anniversary_none_when_unmarried():
+    event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22))
+    assert event.years_at_next_marriage_anniversary(date(2026, 6, 1)) is None
+
+
+def test_spouse_id_and_marriage_date_roundtrip_through_storage():
+    event = Event.create(
+        name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", marriage_date=date(2012, 2, 14)
+    )
+    restored = Event.from_storage_dict(event.to_storage_dict())
+    assert restored.spouse_id == "nicole"
+    assert restored.marriage_date == date(2012, 2, 14)
+
+
+def test_spouse_id_and_marriage_date_default_to_none():
+    event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22))
+    assert event.spouse_id is None
+    assert event.marriage_date is None
+
+
 def test_deceased_event_keeps_date_of_death():
     event = Event.create(
         name="Opa",

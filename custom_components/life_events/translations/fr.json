@@ -38,6 +38,14 @@
     "get_fixed_attributes": {
       "name": "Obtenir les attributs fixes",
       "description": "Retourner le schéma actuel des attributs personnalisés fixes (obligatoires)."
+    },
+    "link_marriage": {
+      "name": "Lier un mariage",
+      "description": "Marier deux personnes existantes, en liant symétriquement les deux fiches avec une date d'anniversaire commune."
+    },
+    "unlink_marriage": {
+      "name": "Délier un mariage",
+      "description": "Divorce : supprime symétriquement le lien de mariage des deux côtés."
     }
   }
 }

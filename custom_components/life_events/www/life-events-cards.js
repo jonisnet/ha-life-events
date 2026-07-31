@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.3-beta.6 loaded");
+  console.info("Life Events cards: v0.0.3-beta.7 loaded");
 
   const DOMAIN = "life_events";
 
@@ -161,6 +161,20 @@
     action_edit_form: "Terug naar formulier",
     yaml_edit_hint: "Technische veldnamen (Engels), niet vertaald - net als YAML-bewerken elders in Home Assistant.",
     validation_invalid_fixed_option: "{key} moet een van de toegestane waarden zijn.",
+    marriage_section_title: "Huwelijk",
+    label_married_to: "Getrouwd met {name} sinds {date}",
+    action_divorce: "Scheiden",
+    marriage_pick_spouse_label: "Kies partner...",
+    marriage_new_person_option: "+ Nieuw persoon aanmaken",
+    new_spouse_firstname_label: "Voornaam nieuwe partner",
+    new_spouse_lastname_label: "Achternaam nieuwe partner (optioneel)",
+    new_spouse_birthdate_label: "Geboortedatum nieuwe partner",
+    marriage_date_label: "Trouwdatum",
+    action_confirm_marriage: "Bevestig huwelijk",
+    confirm_divorce_question: "Dit huwelijk ontkoppelen?",
+    action_divorce_confirm: "Ja, scheiden",
+    marriage_anniversary_inline: "{years}-jarig huwelijk",
+    marriage_anniversary_years_short: "{years} jaar getrouwd",
   };
 
   // Absolute directory this script itself was loaded from, used to fetch
@@ -456,6 +470,11 @@
         dateOfDeath: st.attributes.date_of_death,
         yearsSinceDeath: st.attributes.years_since_death,
         daysUntilDeathAnniversary: st.attributes.days_until_death_anniversary,
+        spouseId: st.attributes.spouse_id,
+        spouseName: st.attributes.spouse_name,
+        marriageDate: st.attributes.marriage_date,
+        daysUntilMarriageAnniversary: st.attributes.days_until_marriage_anniversary,
+        yearsAtNextMarriageAnniversary: st.attributes.years_at_next_marriage_anniversary,
         phoneNumber: st.attributes.phone_number,
         time: st.attributes.time,
         attributes: customAttributesOf(st),
@@ -463,21 +482,65 @@
       .filter((e) => !allowed || allowed.includes(e.eventType));
   }
 
-  // A deceased person appears as TWO separate occasions in the "what's
-  // coming up" cards (Upcoming/Month) - their birthday (age-less,
-  // unchanged) and their death anniversary (years-since-death shown) -
-  // rather than merged into one row. Only used by those two cards' own
-  // event lists, NOT by getEvents() itself: the Manage card's entity-
-  // management list (_baseEvents()) must keep showing each real entity
-  // exactly once, so it must keep calling getEvents() directly.
-  function expandDeceasedOccasions(events) {
+  // Not exhaustive - only the most widely-recognized milestone-year
+  // nicknames per language, deliberately kept modest to avoid overclaiming
+  // folklore accuracy for less universally-agreed-on years. Keyed by the
+  // same language codes as SUPPORTED_LANGS; a year/language with no entry
+  // just shows the plain anniversary number, no nickname.
+  const MARRIAGE_ANNIVERSARY_NICKNAMES = {
+    nl: { 25: "zilveren bruiloft", 40: "robijnen bruiloft", 50: "gouden bruiloft", 60: "diamanten bruiloft" },
+    en: { 25: "silver wedding", 40: "ruby wedding", 50: "golden wedding", 60: "diamond wedding" },
+    de: { 25: "Silberhochzeit", 40: "Rubinhochzeit", 50: "Goldene Hochzeit", 60: "Diamantene Hochzeit" },
+    fr: { 25: "noces d'argent", 40: "noces de rubis", 50: "noces d'or", 60: "noces de diamant" },
+  };
+
+  function marriageAnniversaryNickname(years) {
+    const table = MARRIAGE_ANNIVERSARY_NICKNAMES[currentLangCode];
+    return (table && table[years]) || null;
+  }
+
+  // A deceased person (with a date_of_death) and/or a married person (with
+  // a linked spouse) appear as EXTRA occasions in the "what's coming up"
+  // cards (Upcoming/Month), alongside their own row:
+  //   - death anniversary: own row split into a birthday occasion
+  //     (age-less, unchanged) and a death-anniversary occasion
+  //     (years-since-death shown) - the two are independent, not merged.
+  //   - marriage anniversary: ONE extra combined "A & B" row per couple,
+  //     not two (one from each spouse's own record) - emitted only by
+  //     whichever of the two entity_ids sorts alphabetically first, a
+  //     stable tie-break that needs no extra stored state.
+  // Only used by those two cards' own event lists, NOT by getEvents()
+  // itself: the Manage card's entity-management list (_baseEvents()) must
+  // keep showing each real entity exactly once, so it must keep calling
+  // getEvents() directly.
+  function expandOccasions(events) {
     const out = [];
     events.forEach((e) => {
+      let hasOwnSplit = false;
       if (e.eventType === "deceased" && e.dateOfDeath && e.daysUntilDeathAnniversary != null) {
         out.push({ ...e, isDeathAnniversary: false });
         out.push({ ...e, isDeathAnniversary: true, date: e.dateOfDeath, days: e.daysUntilDeathAnniversary });
-      } else {
-        out.push(e);
+        hasOwnSplit = true;
+      }
+      if (!hasOwnSplit) out.push(e);
+      if (
+        e.spouseId &&
+        e.marriageDate &&
+        e.daysUntilMarriageAnniversary != null &&
+        e.entity_id.split(".")[1] < e.spouseId
+      ) {
+        out.push({
+          ...e,
+          isMarriageAnniversary: true,
+          eventType: "anniversary",
+          name: e.spouseName ? `${e.name} & ${e.spouseName}` : e.name,
+          date: e.marriageDate,
+          days: e.daysUntilMarriageAnniversary,
+          // Overrides the inherited personal icon (e.g. mdi:cake) - this
+          // row represents the couple's anniversary, not either person's
+          // own birthday.
+          icon: EVENT_TYPE_ICONS.anniversary,
+        });
       }
     });
     return out;
@@ -740,7 +803,51 @@
   // Shared add/edit form body - used by the Manage card's popup and, when
   // "Bewerken" is clicked, by the Upcoming/Month cards' details popup too.
   // `editing` is null when adding a new event.
-  function renderEventFormBody(editing, editingId, confirmDelete) {
+  // Married (or was, until the spouse died) -> show read-only info plus a
+  // Scheiden action if still living; unmarried and living -> an inline
+  // "marry" mini-form (candidate picker, optional inline "create a new
+  // person", marriage date, confirm). No marry/divorce action at all for
+  // non-birthday-type records (anniversary/deceased) - deliberately: you
+  // can't marry someone new *as* your own remembrance entry, and a
+  // deceased spouse's own marriage history is shown read-only, never
+  // editable from their own record (see LifeEventsManager's
+  // _clear_stale_marriage_link for the matching backend rule).
+  function renderMarriageSection(editing, editingId, hass) {
+    if (!editing) return "";
+    if (editing.spouseId) {
+      return css`
+        <label>${t("marriage_section_title")}</label>
+        <div class="le-hint">${t("label_married_to", { name: escapeAttr(editing.spouseName || editing.spouseId), date: formatDate(editing.marriageDate) })}</div>
+        ${editing.eventType === "birthday" ? css`<button type="button" class="bd-btn secondary" data-action="start-divorce">${t("action_divorce")}</button>` : ""}
+      `;
+    }
+    if (editing.eventType !== "birthday") return "";
+    const candidates = getEvents(hass, ["birthday"]).filter(
+      (c) => c.entity_id.split(".")[1] !== editingId && !c.spouseId
+    );
+    return css`
+      <label>${t("marriage_section_title")}</label>
+      <select id="f-spouse-select">
+        <option value="">${t("marriage_pick_spouse_label")}</option>
+        ${candidates.map((c) => `<option value="${escapeAttr(c.entity_id.split(".")[1])}">${escapeAttr(c.name)}</option>`).join("")}
+        <option value="__new__">${t("marriage_new_person_option")}</option>
+      </select>
+      <div id="f-new-spouse-fields" style="display:none;">
+        <label>${t("new_spouse_firstname_label")}</label>
+        <input id="f-new-spouse-firstname" />
+        <label>${t("new_spouse_lastname_label")}</label>
+        <input id="f-new-spouse-lastname" />
+        <label>${t("new_spouse_birthdate_label")}</label>
+        <input id="f-new-spouse-birthdate" type="date" />
+      </div>
+      <label>${t("marriage_date_label")}</label>
+      <input id="f-marriage-date" type="date" />
+      <button type="button" class="bd-btn secondary" data-action="confirm-marriage">${t("action_confirm_marriage")}</button>
+      <div id="marriage-status" class="bd-secondary"></div>
+    `;
+  }
+
+  function renderEventFormBody(editing, editingId, confirmDelete, hass) {
     const nameParts = splitName(editing ? editing.name : "");
     return css`
       <div class="bd-form">
@@ -780,6 +887,7 @@
             `;
           })()}
         </div>
+        ${renderMarriageSection(editing, editingId, hass)}
         ${fixedAttributeFieldsHtml(editing)}
         <label>${t("field_custom_attrs")}</label>
         <div id="f-attrs-rows">${attrRowsHtml(freeformAttributesOf(editing ? editing.attributes : {}))}</div>
@@ -1013,6 +1121,10 @@
   //   onDeleteRequest()    - "Verwijderen" clicked, show the confirm step
   //   onDeleteCancel()
   //   onDeleteConfirm()    - delete_event already called, entity is gone
+  //   onRefresh()          - a marry/divorce action completed; re-render so
+  //                          the form reflects the (soon-to-arrive) new
+  //                          hass state, WITHOUT closing the popup the way
+  //                          onSave/onDeleteConfirm do
   function bindEventFormEvents(root, ctx) {
     root.querySelectorAll('[data-action="cancel"]').forEach((btn) => btn.addEventListener("click", ctx.onCancel));
     const saveBtn = root.querySelector('[data-action="save"]');
@@ -1078,8 +1190,82 @@
         const formEl = root.querySelector(".bd-form");
         if (!formEl) return;
         const parsed = parseYamlLite(root.querySelector("#f-yaml").value);
-        formEl.outerHTML = renderEventFormBody(fieldsToEditingLike(parsed), ctx.editingId, false);
+        formEl.outerHTML = renderEventFormBody(fieldsToEditingLike(parsed), ctx.editingId, false, ctx.hass);
         bindEventFormEvents(root, ctx);
+      });
+
+    bindMarriageSection(root, ctx);
+  }
+
+  // Marry/divorce actions for renderMarriageSection()'s markup - part of
+  // bindEventFormEvents (called from there), split out only for
+  // readability given how much is already in that function.
+  function bindMarriageSection(root, ctx) {
+    const spouseSelect = root.querySelector("#f-spouse-select");
+    if (spouseSelect) {
+      spouseSelect.addEventListener("change", () => {
+        const newFields = root.querySelector("#f-new-spouse-fields");
+        if (newFields) newFields.style.display = spouseSelect.value === "__new__" ? "" : "none";
+      });
+    }
+
+    const confirmMarriageBtn = root.querySelector('[data-action="confirm-marriage"]');
+    if (confirmMarriageBtn)
+      confirmMarriageBtn.addEventListener("click", async () => {
+        const statusEl = root.querySelector("#marriage-status");
+        const marriageDate = root.querySelector("#f-marriage-date").value;
+        let spouseId = spouseSelect.value;
+        if (!marriageDate || !spouseId) {
+          if (statusEl) statusEl.textContent = t("validation_required");
+          return;
+        }
+        if (spouseId === "__new__") {
+          const firstName = root.querySelector("#f-new-spouse-firstname").value.trim();
+          const birthDate = root.querySelector("#f-new-spouse-birthdate").value;
+          if (!firstName || !birthDate) {
+            if (statusEl) statusEl.textContent = t("validation_required");
+            return;
+          }
+          const lastName = root.querySelector("#f-new-spouse-lastname").value.trim();
+          const name = lastName ? `${firstName} ${lastName}` : firstName;
+          // wantsResponse=true: add_event returns { id }, needed immediately
+          // below to link the marriage - unlike a normal add via the form,
+          // this can't just wait for the next hass tick to find it.
+          const added = await callService(ctx.hass, "add_event", { name, date: birthDate }, true);
+          spouseId = added && added.id;
+          if (!spouseId) {
+            if (statusEl) statusEl.textContent = t("validation_required");
+            return;
+          }
+        }
+        await callService(ctx.hass, "link_marriage", { event_id: ctx.editingId, spouse_id: spouseId, marriage_date: marriageDate });
+        ctx.onRefresh();
+      });
+
+    const startDivorceBtn = root.querySelector('[data-action="start-divorce"]');
+    if (startDivorceBtn)
+      startDivorceBtn.addEventListener("click", () => {
+        // Same inline two-step confirm pattern as delete (see
+        // renderEventFormBody's confirmDelete branch) - not the browser's
+        // native confirm(). DOM-only swap of just this button, not a
+        // re-render, for the same reason add-attr/edit-as-yaml are DOM-only.
+        startDivorceBtn.outerHTML = css`
+          <div class="bd-confirm">
+            <span>${t("confirm_divorce_question")}</span>
+            <div class="bd-actions">
+              <button type="button" class="bd-btn danger" data-action="confirm-divorce">${t("action_divorce_confirm")}</button>
+              <button type="button" class="bd-btn secondary" data-action="cancel-divorce">${t("action_cancel")}</button>
+            </div>
+          </div>
+        `;
+        const confirmDivorceBtn = root.querySelector('[data-action="confirm-divorce"]');
+        if (confirmDivorceBtn)
+          confirmDivorceBtn.addEventListener("click", async () => {
+            await callService(ctx.hass, "unlink_marriage", { event_id: ctx.editingId });
+            ctx.onRefresh();
+          });
+        const cancelDivorceBtn = root.querySelector('[data-action="cancel-divorce"]');
+        if (cancelDivorceBtn) cancelDivorceBtn.addEventListener("click", () => ctx.onRefresh());
       });
   }
 
@@ -1087,7 +1273,7 @@
   // into the same edit form the Manage card uses, via a "Bewerken" button.
   // `detailsEvent` is the resolved event object (or null - no popup); the
   // returned HTML already includes the modal wrapper.
-  function renderDetailsOrEditModal(detailsEvent, formMode, confirmDelete, dateFormat) {
+  function renderDetailsOrEditModal(detailsEvent, formMode, confirmDelete, dateFormat, hass) {
     if (!detailsEvent) return "";
     const editingId = detailsEvent.entity_id.split(".")[1];
     const title = css`
@@ -1095,7 +1281,7 @@
       <span>${escapeAttr(detailsEvent.name)}</span>
     `;
     const body = formMode
-      ? renderEventFormBody(detailsEvent, editingId, confirmDelete)
+      ? renderEventFormBody(detailsEvent, editingId, confirmDelete, hass)
       : css`
           ${renderDetailsBody(detailsEvent, dateFormat)}
           <button type="button" class="bd-btn bd-details-edit-btn" data-action="start-edit">
@@ -1107,7 +1293,7 @@
 
   // ctx: hass, detailsId, formMode, onStartEdit(), onClose(),
   // onSave(result), onCancelEdit(), onDeleteRequest(), onDeleteCancel(),
-  // onDeleteConfirm()
+  // onDeleteConfirm(), onRefresh()
   function bindDetailsOrEditModal(root, ctx) {
     root.querySelectorAll('[data-action="close-details"]').forEach((btn) => btn.addEventListener("click", ctx.onClose));
     const startEditBtn = root.querySelector('[data-action="start-edit"]');
@@ -1121,6 +1307,7 @@
         onDeleteRequest: ctx.onDeleteRequest,
         onDeleteCancel: ctx.onDeleteCancel,
         onDeleteConfirm: ctx.onDeleteConfirm,
+        onRefresh: ctx.onRefresh,
       });
     }
   }
@@ -1551,7 +1738,7 @@
       if (!this._hass) return;
       setLangFor(this._hass);
       const daysAhead = this._config.days_ahead ?? 14;
-      const events = expandDeceasedOccasions(getEvents(this._hass, this._config.event_types))
+      const events = expandOccasions(getEvents(this._hass, this._config.event_types))
         .filter((e) => e.days <= daysAhead)
         .sort((a, b) => a.days - b.days);
 
@@ -1560,17 +1747,25 @@
             .map((e, i) => {
               // The weekday the upcoming occurrence itself falls on this
               // year (not the weekday the person was originally born on).
+              // Excludes both synthetic occasion rows: the underlying
+              // person's own age_at_next_birthday is still present on
+              // those (see expandOccasions), but isn't relevant to either.
               const becomesText =
-                e.eventType !== "deceased" && e.age != null
+                !e.isDeathAnniversary && !e.isMarriageAnniversary && e.eventType !== "deceased" && e.age != null
                   ? ` &middot; ${t("inline_becomes", { age: e.age, weekday: weekdayName(nextOccurrenceDate(e.date)) })}`
                   : "";
-              // Only the death-anniversary occasion (see
-              // expandDeceasedOccasions) shows the "years ago" text now -
-              // the birthday occasion of a deceased person stays age-less
-              // and note-less, same as any other occasion.
+              // Only the death-anniversary occasion (see expandOccasions)
+              // shows the "years ago" text now - the birthday occasion of
+              // a deceased person stays age-less and note-less, same as
+              // any other occasion.
               const deceasedText =
                 e.isDeathAnniversary && e.yearsSinceDeath != null
                   ? ` &middot; ${t("deceased_years_ago_short", { years: e.yearsSinceDeath })}`
+                  : "";
+              const nickname = e.isMarriageAnniversary ? marriageAnniversaryNickname(e.yearsAtNextMarriageAnniversary) : null;
+              const marriageText =
+                e.isMarriageAnniversary && e.yearsAtNextMarriageAnniversary != null
+                  ? ` &middot; ${t("marriage_anniversary_inline", { years: e.yearsAtNextMarriageAnniversary })}${nickname ? ` (${nickname})` : ""}`
                   : "";
               return css`
               <div class="bd-row" data-action="details" data-id="${e.entity_id.split(".")[1]}">
@@ -1578,7 +1773,7 @@
                   ${this._config.show_icon === false ? "" : `<ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>`}
                   <div>
                     <div class="bd-name">${e.name}</div>
-                    <div class="bd-secondary">${formatDate(e.date, this._config.date_format)} &middot; ${eventTypeLabel(e.eventType)}${becomesText}${deceasedText}</div>
+                    <div class="bd-secondary">${formatDate(e.date, this._config.date_format)} &middot; ${eventTypeLabel(e.eventType)}${becomesText}${deceasedText}${marriageText}</div>
                     ${i === 0 ? `<div class="bd-secondary" id="le-countdown"></div>` : ""}
                   </div>
                 </div>
@@ -1598,7 +1793,7 @@
 
       const bodyHtml = css`
         ${rows}
-        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete, this._config.date_format)}
+        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete, this._config.date_format, this._hass)}
       `;
 
       // Most hass ticks are caused by some unrelated entity elsewhere in HA
@@ -1658,6 +1853,7 @@
           this._confirmDelete = false;
           this._render();
         },
+        onRefresh: () => this._render(),
       });
       bindModalBackdrops(this.shadowRoot);
 
@@ -1805,7 +2001,7 @@
     _render() {
       if (!this._hass) return;
       setLangFor(this._hass);
-      const events = expandDeceasedOccasions(getEvents(this._hass, this._config.event_types));
+      const events = expandOccasions(getEvents(this._hass, this._config.event_types));
       const columns = this._config.columns || 3;
 
       const buttons = months().map((label, idx) => {
@@ -1846,7 +2042,19 @@
                   <td>${formatDate(e.date, this._config.date_format)}</td>
                   <td>${e.name}</td>
                   <td><span class="bd-type-badge">${eventTypeLabel(e.eventType)}</span></td>
-                  <td>${e.isDeathAnniversary ? (e.yearsSinceDeath != null ? t("deceased_years_ago_short", { years: e.yearsSinceDeath }) : "") : e.eventType === "deceased" ? "" : e.age ?? ""}</td>
+                  <td>${
+                    e.isMarriageAnniversary
+                      ? e.yearsAtNextMarriageAnniversary != null
+                        ? marriageAnniversaryNickname(e.yearsAtNextMarriageAnniversary) || t("marriage_anniversary_years_short", { years: e.yearsAtNextMarriageAnniversary })
+                        : ""
+                      : e.isDeathAnniversary
+                        ? e.yearsSinceDeath != null
+                          ? t("deceased_years_ago_short", { years: e.yearsSinceDeath })
+                          : ""
+                        : e.eventType === "deceased"
+                          ? ""
+                          : e.age ?? ""
+                  }</td>
                 </tr>
               `
               )
@@ -1862,7 +2070,7 @@
       const bodyHtml = css`
         <div class="bd-months">${buttons}</div>
         ${table}
-        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete, this._config.date_format)}
+        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete, this._config.date_format, this._hass)}
       `;
 
       // See LifeEventsUpcomingCard._render() for why this skips the full
@@ -1927,6 +2135,7 @@
           this._confirmDelete = false;
           this._render();
         },
+        onRefresh: () => this._render(),
       });
       bindModalBackdrops(this.shadowRoot);
     }
@@ -2203,7 +2412,7 @@
 
       const editing = this._editingId ? this._baseEvents().find((e) => e.entity_id === `${DOMAIN}.${this._editingId}`) : null;
 
-      const formBody = renderEventFormBody(editing, this._editingId, this._confirmDelete);
+      const formBody = renderEventFormBody(editing, this._editingId, this._confirmDelete, this._hass);
 
       const importExportBody = css`
         <div class="bd-form">
@@ -2377,6 +2586,7 @@
           this._confirmDelete = false;
           this._render();
         },
+        onRefresh: () => this._render(),
       });
 
       const ioBtn = root.querySelector('[data-action="io"]');

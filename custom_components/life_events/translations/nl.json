@@ -38,6 +38,14 @@
     "get_fixed_attributes": {
       "name": "Vaste attributen opvragen",
       "description": "Geef het huidige schema van vaste (verplichte) aangepaste attributen terug."
+    },
+    "link_marriage": {
+      "name": "Huwelijk koppelen",
+      "description": "Trouw twee bestaande personen, waarbij beide records symmetrisch worden gekoppeld met een gedeelde jubileumdatum."
+    },
+    "unlink_marriage": {
+      "name": "Huwelijk ontkoppelen",
+      "description": "Scheiden: verwijder de huwelijkskoppeling symmetrisch aan beide kanten."
     }
   }
 }

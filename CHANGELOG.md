@@ -3,6 +3,33 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.3-beta.7
+
+### Added
+- **Marriage/anniversary linking between two people.** From a living
+  person's edit form, "Trouwen" lets you pick their spouse from the
+  existing list of people (or create a brand-new person inline on the
+  spot) and a marriage date - both records are symmetrically linked, and
+  the couple then appears as one combined "A & B" wedding-anniversary
+  occasion in the Upcoming/Month overview (shown once per couple, not
+  twice). "Scheiden" unlinks a living couple symmetrically. If a married
+  person dies, their marriage stays linked as-is - remarrying (e.g. a
+  widow/widower) only updates the living person's own record, leaving
+  their late spouse's marriage history untouched. New backend services
+  `link_marriage`/`unlink_marriage` and entity attributes (`spouse_id`,
+  `spouse_name`, `marriage_date`, `days_until_marriage_anniversary`,
+  `years_at_next_marriage_anniversary`).
+- **Wedding-anniversary nicknames** (25=zilveren/silver, 40=robijnen/ruby,
+  50=gouden/golden, 60=diamanten/diamond bruiloft, in nl/en/de/fr) shown
+  automatically alongside a milestone marriage anniversary - a modest,
+  not-exhaustive list to avoid overclaiming folklore accuracy for less
+  universally-agreed-on years.
+
+Verified with 18 new runtime checks (marriage-test.html) plus 9 new
+backend tests (link/unlink, symmetric divorce, remarriage-after-widowhood
+leaving the deceased spouse's own record untouched, delete cascading to
+the surviving spouse) plus the full existing regression suite.
+
 ## 0.0.3-beta.6
 
 ### Changed

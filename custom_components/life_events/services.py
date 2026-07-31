@@ -21,7 +21,9 @@ from .const import (
     SERVICE_EXPORT_EVENTS,
     SERVICE_GET_FIXED_ATTRIBUTES,
     SERVICE_IMPORT_EVENTS,
+    SERVICE_LINK_MARRIAGE,
     SERVICE_SET_FIXED_ATTRIBUTES,
+    SERVICE_UNLINK_MARRIAGE,
     SERVICE_UPDATE_EVENT,
 )
 
@@ -76,6 +78,16 @@ SET_FIXED_ATTRIBUTES_SCHEMA = vol.Schema(
     {vol.Required(CONF_FIXED_ATTRIBUTES): [FIXED_ATTRIBUTE_SCHEMA]}
 )
 
+LINK_MARRIAGE_SCHEMA = vol.Schema(
+    {
+        vol.Required("event_id"): cv.string,
+        vol.Required("spouse_id"): cv.string,
+        vol.Required("marriage_date"): cv.date,
+    }
+)
+
+UNLINK_MARRIAGE_SCHEMA = vol.Schema({vol.Required("event_id"): cv.string})
+
 
 def _manager_for_call(hass: HomeAssistant, call: ServiceCall):
     """There is only ever a single config entry (single_instance_allowed)."""
@@ -126,6 +138,14 @@ def async_register_services(hass: HomeAssistant) -> None:
         manager = _manager_for_call(hass, call)
         return {CONF_FIXED_ATTRIBUTES: manager.fixed_attributes}
 
+    async def _link_marriage(call: ServiceCall) -> None:
+        manager = _manager_for_call(hass, call)
+        await manager.async_link_marriage(call.data["event_id"], call.data["spouse_id"], call.data["marriage_date"])
+
+    async def _unlink_marriage(call: ServiceCall) -> None:
+        manager = _manager_for_call(hass, call)
+        await manager.async_unlink_marriage(call.data["event_id"])
+
     hass.services.async_register(DOMAIN, SERVICE_ADD_EVENT, _add_event, schema=ADD_EVENT_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, SERVICE_UPDATE_EVENT, _update_event, schema=UPDATE_EVENT_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, SERVICE_DELETE_EVENT, _delete_event, schema=DELETE_EVENT_SCHEMA)
@@ -133,6 +153,8 @@ def async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, SERVICE_EXPORT_EVENTS, _export_events, schema=EXPORT_EVENTS_SCHEMA, supports_response=SupportsResponse.ONLY)
     hass.services.async_register(DOMAIN, SERVICE_SET_FIXED_ATTRIBUTES, _set_fixed_attributes, schema=SET_FIXED_ATTRIBUTES_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_GET_FIXED_ATTRIBUTES, _get_fixed_attributes, schema=vol.Schema({}), supports_response=SupportsResponse.ONLY)
+    hass.services.async_register(DOMAIN, SERVICE_LINK_MARRIAGE, _link_marriage, schema=LINK_MARRIAGE_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_UNLINK_MARRIAGE, _unlink_marriage, schema=UNLINK_MARRIAGE_SCHEMA)
 
 
 def async_unregister_services(hass: HomeAssistant) -> None:
@@ -146,5 +168,7 @@ def async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_EXPORT_EVENTS,
         SERVICE_SET_FIXED_ATTRIBUTES,
         SERVICE_GET_FIXED_ATTRIBUTES,
+        SERVICE_LINK_MARRIAGE,
+        SERVICE_UNLINK_MARRIAGE,
     ):
         hass.services.async_remove(DOMAIN, service)

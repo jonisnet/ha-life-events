@@ -94,5 +94,19 @@
   "action_edit_yaml": "Als YAML bearbeiten",
   "action_edit_form": "Zurück zum Formular",
   "yaml_edit_hint": "Technische Feldnamen (Englisch), nicht übersetzt - wie die YAML-Bearbeitung an anderer Stelle in Home Assistant.",
-  "validation_invalid_fixed_option": "{key} muss einer der zulässigen Werte sein."
+  "validation_invalid_fixed_option": "{key} muss einer der zulässigen Werte sein.",
+  "marriage_section_title": "Ehe",
+  "label_married_to": "Verheiratet mit {name} seit {date}",
+  "action_divorce": "Scheiden",
+  "marriage_pick_spouse_label": "Partner wählen...",
+  "marriage_new_person_option": "+ Neue Person anlegen",
+  "new_spouse_firstname_label": "Vorname des neuen Partners",
+  "new_spouse_lastname_label": "Nachname des neuen Partners (optional)",
+  "new_spouse_birthdate_label": "Geburtsdatum des neuen Partners",
+  "marriage_date_label": "Hochzeitsdatum",
+  "action_confirm_marriage": "Ehe bestätigen",
+  "confirm_divorce_question": "Diese Ehe trennen?",
+  "action_divorce_confirm": "Ja, scheiden",
+  "marriage_anniversary_inline": "{years}. Hochzeitstag",
+  "marriage_anniversary_years_short": "{years} Jahre verheiratet"
 }

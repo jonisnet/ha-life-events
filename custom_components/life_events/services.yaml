@@ -164,3 +164,34 @@ set_fixed_attributes:
 get_fixed_attributes:
   name: Get fixed attributes
   description: Return the current schema of fixed (required) custom attributes.
+
+link_marriage:
+  name: Link marriage
+  description: >-
+    Marry two existing persons, symmetrically linking both records with a
+    shared anniversary date. Normally called from the Manage/Upcoming/Month
+    cards' "Trouwen" action, not directly.
+  fields:
+    event_id:
+      required: true
+      selector:
+        text:
+    spouse_id:
+      required: true
+      selector:
+        text:
+    marriage_date:
+      required: true
+      selector:
+        date:
+
+unlink_marriage:
+  name: Unlink marriage
+  description: >-
+    Divorce: symmetrically clear the marriage link on both sides. Normally
+    called from the cards' "Scheiden" action, not directly.
+  fields:
+    event_id:
+      required: true
+      selector:
+        text:

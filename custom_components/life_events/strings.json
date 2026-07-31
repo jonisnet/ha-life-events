@@ -38,6 +38,14 @@
     "get_fixed_attributes": {
       "name": "Get fixed attributes",
       "description": "Return the current schema of fixed (required) custom attributes."
+    },
+    "link_marriage": {
+      "name": "Link marriage",
+      "description": "Marry two existing persons, symmetrically linking both records with a shared anniversary date."
+    },
+    "unlink_marriage": {
+      "name": "Unlink marriage",
+      "description": "Divorce: symmetrically clear the marriage link on both sides."
     }
   }
 }

@@ -20,6 +20,7 @@ from .const import (
     CONF_ICON,
     CONF_NAME,
     EVENT_TYPE_ANNIVERSARY,
+    EVENT_TYPE_DECEASED,
     LEGACY_ANNIVERSARY_HINTS,
     SIGNAL_EVENTS_UPDATED,
 )
@@ -179,11 +180,93 @@ class LifeEventsManager:
     async def async_delete_event(self, event_id: str) -> None:
         if event_id not in self.events:
             return
+        # A surviving spouse's own record must not keep pointing at a
+        # spouse_id that no longer exists - clear their side of the link
+        # too (their own marriage_date/spouse_id, not the deleted record,
+        # which is gone regardless).
+        spouse_id = self.events[event_id].spouse_id
+        if spouse_id and spouse_id in self.events:
+            spouse = self.events[spouse_id]
+            spouse.spouse_id = None
+            spouse.marriage_date = None
+            spouse_entity = self._entities.get(spouse_id)
+            if spouse_entity:
+                spouse_entity.async_write_ha_state()
         del self.events[event_id]
         await self.store.async_save(list(self.events.values()))
         entity = self._entities.pop(event_id, None)
         if entity:
             await entity.async_remove(force_remove=True)
+        async_dispatcher_send(self.hass, self.signal)
+
+    # -- Marriage linking --------------------------------------------------
+
+    def _clear_stale_marriage_link(self, event_id: str) -> None:
+        """If event_id is currently linked, clear that link before relinking.
+
+        The OTHER side is only cleared too if that spouse is still alive -
+        a living "divorce" is symmetric, but if event_id's old spouse has
+        since died, their own record is left untouched (their marriage
+        history stays factually intact; only event_id itself moves on to
+        the new marriage) - see the "widow(er) remarries" case in the
+        roadmap this implements.
+        """
+        event = self.events.get(event_id)
+        if not event or not event.spouse_id:
+            return
+        old_spouse = self.events.get(event.spouse_id)
+        if old_spouse and old_spouse.event_type != EVENT_TYPE_DECEASED:
+            old_spouse.spouse_id = None
+            old_spouse.marriage_date = None
+        event.spouse_id = None
+        event.marriage_date = None
+
+    async def async_link_marriage(self, event_id: str, spouse_id: str, marriage_date: date) -> None:
+        """Marry two existing persons, symmetrically linking both records."""
+        if event_id not in self.events:
+            raise ServiceValidationError(f"Unknown event id: {event_id}")
+        if spouse_id not in self.events:
+            raise ServiceValidationError(f"Unknown event id: {spouse_id}")
+        if event_id == spouse_id:
+            raise ServiceValidationError("A person cannot marry themselves")
+
+        # Defensive: normally the UI only offers unmarried candidates, but
+        # a direct service call could ask to link someone already linked
+        # elsewhere - unwind any existing link on either side first so the
+        # result is never a 3-way inconsistency.
+        self._clear_stale_marriage_link(event_id)
+        self._clear_stale_marriage_link(spouse_id)
+
+        self.events[event_id].spouse_id = spouse_id
+        self.events[event_id].marriage_date = marriage_date
+        self.events[spouse_id].spouse_id = event_id
+        self.events[spouse_id].marriage_date = marriage_date
+
+        await self.store.async_save(list(self.events.values()))
+        for eid in (event_id, spouse_id):
+            entity = self._entities.get(eid)
+            if entity:
+                entity.async_write_ha_state()
+        async_dispatcher_send(self.hass, self.signal)
+
+    async def async_unlink_marriage(self, event_id: str) -> None:
+        """Divorce: symmetrically clear the link on both sides."""
+        if event_id not in self.events:
+            raise ServiceValidationError(f"Unknown event id: {event_id}")
+        event = self.events[event_id]
+        spouse_id = event.spouse_id
+        event.spouse_id = None
+        event.marriage_date = None
+        if spouse_id and spouse_id in self.events:
+            spouse = self.events[spouse_id]
+            spouse.spouse_id = None
+            spouse.marriage_date = None
+
+        await self.store.async_save(list(self.events.values()))
+        for eid in (event_id, spouse_id):
+            entity = self._entities.get(eid) if eid else None
+            if entity:
+                entity.async_write_ha_state()
         async_dispatcher_send(self.hass, self.signal)
 
     async def async_import_events(self, content: str, fmt: str, mode: str) -> int:

@@ -31,6 +31,15 @@ CONF_PHONE_NUMBER = "phone_number"
 # plain "HH:MM" string, not a real time object. Rarely known for existing
 # entries, but often printed on a birth announcement card for a newborn.
 CONF_TIME = "time"
+# Marriage link: `spouse_id` points at the OTHER person's event id,
+# `marriage_date` is the shared anniversary date - stored redundantly on
+# both spouses' own records (not as a 3rd linked entity) so the marriage
+# survives either side's deletion/lookup independently, mirroring how
+# other per-record fields in this file work. Set/cleared together via
+# LifeEventsManager.async_link_marriage()/async_unlink_marriage(), never
+# directly through add_event/update_event.
+CONF_SPOUSE_ID = "spouse_id"
+CONF_MARRIAGE_DATE = "marriage_date"
 
 # Legacy YAML fields (kept so existing configuration.yaml keeps validating during import)
 CONF_UNIQUE_ID = "unique_id"
@@ -69,6 +78,8 @@ SERVICE_IMPORT_EVENTS = "import_events"
 SERVICE_EXPORT_EVENTS = "export_events"
 SERVICE_SET_FIXED_ATTRIBUTES = "set_fixed_attributes"
 SERVICE_GET_FIXED_ATTRIBUTES = "get_fixed_attributes"
+SERVICE_LINK_MARRIAGE = "link_marriage"
+SERVICE_UNLINK_MARRIAGE = "unlink_marriage"
 
 # A fixed-attribute definition: {"key": str, "options": list[str] | None}.
 # `options` absent/None means a required free-text field; present means a
@@ -98,5 +109,7 @@ CSV_FIELDNAMES = [
     CONF_DATE_OF_DEATH,
     CONF_ICON,
     CONF_PHONE_NUMBER,
+    CONF_SPOUSE_ID,
+    CONF_MARRIAGE_DATE,
     CONF_ATTRIBUTES,
 ]

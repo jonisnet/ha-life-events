@@ -94,5 +94,19 @@
   "action_edit_yaml": "Modifier en YAML",
   "action_edit_form": "Retour au formulaire",
   "yaml_edit_hint": "Noms de champs techniques (anglais), non traduits - comme l'édition YAML ailleurs dans Home Assistant.",
-  "validation_invalid_fixed_option": "{key} doit être l'une des valeurs autorisées."
+  "validation_invalid_fixed_option": "{key} doit être l'une des valeurs autorisées.",
+  "marriage_section_title": "Mariage",
+  "label_married_to": "Marié(e) à {name} depuis {date}",
+  "action_divorce": "Divorcer",
+  "marriage_pick_spouse_label": "Choisir un partenaire...",
+  "marriage_new_person_option": "+ Créer une nouvelle personne",
+  "new_spouse_firstname_label": "Prénom du nouveau partenaire",
+  "new_spouse_lastname_label": "Nom du nouveau partenaire (optionnel)",
+  "new_spouse_birthdate_label": "Date de naissance du nouveau partenaire",
+  "marriage_date_label": "Date de mariage",
+  "action_confirm_marriage": "Confirmer le mariage",
+  "confirm_divorce_question": "Dissocier ce mariage ?",
+  "action_divorce_confirm": "Oui, divorcer",
+  "marriage_anniversary_inline": "{years}e anniversaire de mariage",
+  "marriage_anniversary_years_short": "{years} ans de mariage"
 }
