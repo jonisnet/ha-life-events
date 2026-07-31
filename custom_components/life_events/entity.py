@@ -110,6 +110,9 @@ class EventEntity(Entity):
             years_since_death = event.years_since_death(today)
             if years_since_death is not None:
                 attrs["years_since_death"] = years_since_death
+            days_until_death_anniversary = event.days_until_next_death_anniversary(today)
+            if days_until_death_anniversary is not None:
+                attrs["days_until_death_anniversary"] = days_until_death_anniversary
         if event.phone_number:
             attrs["phone_number"] = event.phone_number
         if event.time:

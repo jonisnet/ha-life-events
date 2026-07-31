@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.3-beta.5 loaded");
+  console.info("Life Events cards: v0.0.3-beta.6 loaded");
 
   const DOMAIN = "life_events";
 
@@ -455,11 +455,32 @@
         eventType: st.attributes.event_type || "birthday",
         dateOfDeath: st.attributes.date_of_death,
         yearsSinceDeath: st.attributes.years_since_death,
+        daysUntilDeathAnniversary: st.attributes.days_until_death_anniversary,
         phoneNumber: st.attributes.phone_number,
         time: st.attributes.time,
         attributes: customAttributesOf(st),
       }))
       .filter((e) => !allowed || allowed.includes(e.eventType));
+  }
+
+  // A deceased person appears as TWO separate occasions in the "what's
+  // coming up" cards (Upcoming/Month) - their birthday (age-less,
+  // unchanged) and their death anniversary (years-since-death shown) -
+  // rather than merged into one row. Only used by those two cards' own
+  // event lists, NOT by getEvents() itself: the Manage card's entity-
+  // management list (_baseEvents()) must keep showing each real entity
+  // exactly once, so it must keep calling getEvents() directly.
+  function expandDeceasedOccasions(events) {
+    const out = [];
+    events.forEach((e) => {
+      if (e.eventType === "deceased" && e.dateOfDeath && e.daysUntilDeathAnniversary != null) {
+        out.push({ ...e, isDeathAnniversary: false });
+        out.push({ ...e, isDeathAnniversary: true, date: e.dateOfDeath, days: e.daysUntilDeathAnniversary });
+      } else {
+        out.push(e);
+      }
+    });
+    return out;
   }
 
   // `format`: "short" (default, dd-mm-yyyy, locale-agnostic - unchanged
@@ -1530,7 +1551,7 @@
       if (!this._hass) return;
       setLangFor(this._hass);
       const daysAhead = this._config.days_ahead ?? 14;
-      const events = getEvents(this._hass, this._config.event_types)
+      const events = expandDeceasedOccasions(getEvents(this._hass, this._config.event_types))
         .filter((e) => e.days <= daysAhead)
         .sort((a, b) => a.days - b.days);
 
@@ -1543,8 +1564,12 @@
                 e.eventType !== "deceased" && e.age != null
                   ? ` &middot; ${t("inline_becomes", { age: e.age, weekday: weekdayName(nextOccurrenceDate(e.date)) })}`
                   : "";
+              // Only the death-anniversary occasion (see
+              // expandDeceasedOccasions) shows the "years ago" text now -
+              // the birthday occasion of a deceased person stays age-less
+              // and note-less, same as any other occasion.
               const deceasedText =
-                e.eventType === "deceased" && e.yearsSinceDeath != null
+                e.isDeathAnniversary && e.yearsSinceDeath != null
                   ? ` &middot; ${t("deceased_years_ago_short", { years: e.yearsSinceDeath })}`
                   : "";
               return css`
@@ -1780,7 +1805,7 @@
     _render() {
       if (!this._hass) return;
       setLangFor(this._hass);
-      const events = getEvents(this._hass, this._config.event_types);
+      const events = expandDeceasedOccasions(getEvents(this._hass, this._config.event_types));
       const columns = this._config.columns || 3;
 
       const buttons = months().map((label, idx) => {
@@ -1821,7 +1846,7 @@
                   <td>${formatDate(e.date, this._config.date_format)}</td>
                   <td>${e.name}</td>
                   <td><span class="bd-type-badge">${eventTypeLabel(e.eventType)}</span></td>
-                  <td>${e.eventType === "deceased" ? (e.yearsSinceDeath != null ? t("deceased_years_ago_short", { years: e.yearsSinceDeath }) : "") : e.age ?? ""}</td>
+                  <td>${e.isDeathAnniversary ? (e.yearsSinceDeath != null ? t("deceased_years_ago_short", { years: e.yearsSinceDeath }) : "") : e.eventType === "deceased" ? "" : e.age ?? ""}</td>
                 </tr>
               `
               )

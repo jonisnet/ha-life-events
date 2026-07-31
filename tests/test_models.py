@@ -60,6 +60,26 @@ def test_years_since_death_none_without_date_of_death():
     assert event.years_since_death(date(2026, 6, 1)) is None
 
 
+def test_days_until_next_death_anniversary_wraps_to_next_year():
+    event = Event.create(
+        name="Opa", date_=date(1930, 3, 3), event_type="deceased", date_of_death=date(2020, 11, 4)
+    )
+    today = date(2026, 6, 1)
+    assert event.days_until_next_death_anniversary(today) == (date(2026, 11, 4) - today).days
+
+
+def test_days_until_next_death_anniversary_today_is_zero():
+    event = Event.create(
+        name="Opa", date_=date(1930, 3, 3), event_type="deceased", date_of_death=date(2020, 11, 4)
+    )
+    assert event.days_until_next_death_anniversary(date(2026, 11, 4)) == 0
+
+
+def test_days_until_next_death_anniversary_none_without_date_of_death():
+    event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22))
+    assert event.days_until_next_death_anniversary(date(2026, 6, 1)) is None
+
+
 def test_deceased_event_keeps_date_of_death():
     event = Event.create(
         name="Opa",

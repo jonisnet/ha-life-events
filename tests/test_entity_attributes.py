@@ -77,3 +77,42 @@ async def test_deceased_event_without_date_of_death_has_no_years_since_death(
 
     state = hass.states.get("life_events.onbekend")
     assert "years_since_death" not in state.attributes
+
+
+async def test_deceased_event_exposes_days_until_death_anniversary(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "add_event",
+        {
+            "name": "Opa",
+            "date": "1930-03-03",
+            "event_type": "deceased",
+            "date_of_death": "2020-11-04",
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    state = hass.states.get("life_events.opa")
+    assert "days_until_death_anniversary" in state.attributes
+    assert isinstance(state.attributes["days_until_death_anniversary"], int)
+    assert state.attributes["days_until_death_anniversary"] >= 0
+
+
+async def test_deceased_event_without_date_of_death_has_no_days_until_death_anniversary(
+    hass: HomeAssistant,
+) -> None:
+    await _setup_entry(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "add_event",
+        {"name": "Onbekend", "date": "1930-03-03", "event_type": "deceased"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    state = hass.states.get("life_events.onbekend")
+    assert "days_until_death_anniversary" not in state.attributes

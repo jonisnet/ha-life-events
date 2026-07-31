@@ -115,6 +115,22 @@ class Event:
             next_occurrence = next_occurrence.replace(year=today.year + 1)
         return next_occurrence.year - self.date.year
 
+    def days_until_next_death_anniversary(self, today: date) -> int | None:
+        """Days until the next anniversary of date_of_death, or None if unset.
+
+        Mirrors days_until_next_occurrence's forward-looking rollover logic
+        exactly, just sourced from date_of_death instead of date - lets a
+        deceased person's death anniversary be surfaced as its own upcoming
+        occasion (see EventEntity.extra_state_attributes and the cards'
+        expandDeceasedOccasions()), separate from their birthday occasion.
+        """
+        if not self.date_of_death:
+            return None
+        next_occurrence = date(today.year, self.date_of_death.month, self.date_of_death.day)
+        if next_occurrence < today:
+            next_occurrence = next_occurrence.replace(year=today.year + 1)
+        return (next_occurrence - today).days
+
     def years_since_death(self, today: date) -> int | None:
         """Complete years since date_of_death, counting up on each anniversary.
 

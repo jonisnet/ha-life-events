@@ -3,6 +3,24 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.3-beta.6
+
+### Changed
+- **A deceased person with a death date now appears as TWO separate
+  occasions in the Upcoming/Month cards' overview, instead of one merged
+  row.** Their birthday occasion stays exactly as before (no age shown).
+  Their death anniversary is now its own row, on the actual anniversary
+  date, showing the "X jaar geleden" (years since death) text that
+  previously appeared - a bit confusingly - alongside the birthday date
+  instead. New backend attribute `days_until_death_anniversary` (mirrors
+  the existing birthday `state`/days-until logic, sourced from
+  `date_of_death`) drives this; the Manage card's own entity-management
+  list is unaffected and still shows every person exactly once.
+
+Verified with an extended `deceased-years-test.html` (11 checks, up from
+7) plus new backend tests for `days_until_next_death_anniversary()` and
+the new entity attribute, plus the full existing regression suite.
+
 ## 0.0.3-beta.5
 
 ### Added
