@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configurer Life Events",
+        "description": "Suivez les anniversaires, les anniversaires de mariage et (en option) les proches décédés. Vous pourrez ensuite tout gérer depuis les cartes Life Events."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Life Events est déjà configuré. Une seule instance est nécessaire."
+    }
+  },
+  "services": {
+    "add_event": {
+      "name": "Ajouter un événement",
+      "description": "Ajouter un anniversaire, un anniversaire de mariage ou un décès."
+    },
+    "update_event": {
+      "name": "Mettre à jour un événement",
+      "description": "Mettre à jour un événement existant. Seuls les champs fournis sont modifiés."
+    },
+    "delete_event": {
+      "name": "Supprimer un événement",
+      "description": "Supprimer un événement."
+    },
+    "import_events": {
+      "name": "Importer des événements",
+      "description": "Importer en masse des événements depuis une chaîne CSV ou JSON."
+    },
+    "export_events": {
+      "name": "Exporter des événements",
+      "description": "Exporter tous les événements au format CSV ou JSON."
+    }
+  }
+}

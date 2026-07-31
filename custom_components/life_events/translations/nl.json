@@ -9,5 +9,27 @@
     "abort": {
       "single_instance_allowed": "Levensgebeurtenissen is al ingesteld. Er is maar één instantie nodig."
     }
+  },
+  "services": {
+    "add_event": {
+      "name": "Gebeurtenis toevoegen",
+      "description": "Voeg een verjaardag, jubileum of overlijden toe."
+    },
+    "update_event": {
+      "name": "Gebeurtenis bijwerken",
+      "description": "Werk een bestaande gebeurtenis bij. Alleen de opgegeven velden worden gewijzigd."
+    },
+    "delete_event": {
+      "name": "Gebeurtenis verwijderen",
+      "description": "Verwijder een gebeurtenis."
+    },
+    "import_events": {
+      "name": "Gebeurtenissen importeren",
+      "description": "Importeer in bulk gebeurtenissen vanuit een CSV- of JSON-tekst."
+    },
+    "export_events": {
+      "name": "Gebeurtenissen exporteren",
+      "description": "Exporteer alle gebeurtenissen als CSV- of JSON-tekst."
+    }
   }
 }

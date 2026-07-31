@@ -122,8 +122,9 @@ Application → Storage → Clear site data.
 - **Life Events: Manage** (`life-events-manage-card`) — search/filter, add,
   edit, delete, import/export events. Adding/editing opens as a popup.
   Has a `display_mode` option (set in the card's visual editor, under
-  **Weergave**): `full` (default) keeps the list/search always visible, or
-  `button` shows just a button that opens the whole panel as a popup.
+  **Display**/**Weergave**): `full` (default) keeps the list/search always
+  visible, or `button` shows just a button that opens the whole panel as a
+  popup.
   On a fresh install with no events yet, the add-event popup opens
   automatically.
 
@@ -145,6 +146,25 @@ Add them via the dashboard UI card picker (search "Life Events"), or in YAML:
 Every card supports an `event_types` list to only show birthdays,
 anniversaries, deceased, or any combination — configurable from each card's
 visual editor.
+
+## Language
+
+Both the integration (config flow, service names) and the cards auto-detect
+your Home Assistant language (`hass.language`) — no setting to configure.
+Currently shipped: Dutch, English, German, French; anything else falls back
+to English, then Dutch.
+
+Card text lives in `custom_components/life_events/www/translations/*.json`
+(one small JSON file per language, just key → text). Contributing a new
+language is just copying `en.json`, translating the values, and adding the
+language code to `SUPPORTED_LANGS` near the top of
+`life-events-cards.js` — no other code changes needed. The integration's own
+strings (config flow, service names) follow HA's normal
+`translations/*.json` convention in the same way.
+
+Not yet translated: the phone-number field's country-name dropdown (still
+Dutch-only) and the cards' default titles shown before you've set your own
+(e.g. when first dragging a card onto a dashboard).
 
 ## Automation
 

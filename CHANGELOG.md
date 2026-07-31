@@ -3,6 +3,34 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.11 — unreleased
+
+### Added
+- **Automatic language detection for both the integration and the cards.**
+  Everything now follows `hass.language` (your Home Assistant profile
+  language) with no setting to configure - no more Dutch-only UI. Shipped
+  languages: Dutch, English, German, French; anything unsupported falls
+  back to English, then Dutch. The cards' text lives in
+  `custom_components/life_events/www/translations/*.json`, one small JSON
+  file per language, loaded lazily the first time a language is needed
+  (Dutch is inlined in the script itself, so it always works with zero
+  network requests even if the translation files can't be fetched for some
+  reason). Adding a new language is just copying `en.json`, translating the
+  values, and adding the language code to `SUPPORTED_LANGS` near the top
+  of `life-events-cards.js` - no other code changes, so the community can
+  contribute a translation directly. The integration's own config-flow and
+  service name/description strings follow HA's normal
+  `translations/*.json` convention the same way. Not yet translated (out
+  of scope for this pass, tracked for later): the phone-number field's
+  country-name dropdown, and the cards' pre-configured default titles.
+  Verified with a dedicated 7-check runtime test covering language
+  auto-detection, base-language extraction from region variants (e.g.
+  `de-AT` → `de`), graceful fallback when a translation file can't be
+  fetched, and the zero-network-request Dutch default - plus the full
+  existing regression suite (91 checks, all still passing; the refactor
+  touched nearly every render function but changed no behavior for the
+  default Dutch case).
+
 ## 0.0.2-beta.10
 
 ### Fixed

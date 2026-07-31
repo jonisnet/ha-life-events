@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Life Events einrichten",
+        "description": "Geburtstage, Jubiläen und (optional) verstorbene Angehörige verfolgen. Danach lässt sich alles über die Life Events-Karten verwalten."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Life Events ist bereits eingerichtet. Es wird nur eine Instanz benötigt."
+    }
+  },
+  "services": {
+    "add_event": {
+      "name": "Ereignis hinzufügen",
+      "description": "Einen Geburtstag, ein Jubiläum oder einen Sterbefall hinzufügen."
+    },
+    "update_event": {
+      "name": "Ereignis aktualisieren",
+      "description": "Ein bestehendes Ereignis aktualisieren. Nur die angegebenen Felder werden geändert."
+    },
+    "delete_event": {
+      "name": "Ereignis löschen",
+      "description": "Ein Ereignis entfernen."
+    },
+    "import_events": {
+      "name": "Ereignisse importieren",
+      "description": "Ereignisse aus einer CSV- oder JSON-Zeichenfolge importieren."
+    },
+    "export_events": {
+      "name": "Ereignisse exportieren",
+      "description": "Alle Ereignisse als CSV- oder JSON-Zeichenfolge exportieren."
+    }
+  }
+}

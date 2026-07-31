@@ -47,20 +47,176 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.10 loaded");
+  console.info("Life Events cards: v0.0.2-beta.11 loaded");
 
   const DOMAIN = "life_events";
 
-  const MONTHS_NL = [
-    "Januari", "Februari", "Maart", "April", "Mei", "Juni",
-    "Juli", "Augustus", "September", "Oktober", "November", "December",
-  ];
+  // ---------------------------------------------------------------------
+  // i18n: language auto-detected from `hass.language` (no user setting
+  // needed). Dutch is the only language baked directly into this file (zero
+  // network requests, always available even if translations/ can't be
+  // fetched for some reason); every other language lives in its own
+  // `translations/<lang>.json` file next to this script and is fetched
+  // lazily the first time it's needed. Adding a new language is just
+  // dropping a new JSON file in that folder (copy translations/en.json,
+  // translate the values) and adding its code to SUPPORTED_LANGS below -
+  // no JS changes, so the community can contribute translations directly.
+  // ---------------------------------------------------------------------
+  const SUPPORTED_LANGS = ["nl", "en", "de", "fr"];
 
-  const EVENT_TYPE_LABELS = {
-    birthday: "Verjaardag",
-    anniversary: "Jubileum",
-    deceased: "Overleden",
+  const TRANSLATIONS_NL = {
+    months: ["Januari", "Februari", "Maart", "April", "Mei", "Juni", "Juli", "Augustus", "September", "Oktober", "November", "December"],
+    event_type_birthday: "Verjaardag",
+    event_type_anniversary: "Jubileum",
+    event_type_deceased: "Overleden",
+    label_date: "Datum",
+    label_name: "Naam",
+    label_type: "Type",
+    label_age: "Leeftijd",
+    label_time: "Tijd",
+    label_becomes: "Wordt",
+    label_date_of_death: "Datum van overlijden",
+    label_phone: "Telefoonnummer",
+    label_import_export: "Import / export",
+    inline_becomes: "wordt {age}",
+    countdown_today: "Vandaag!",
+    countdown_format: "Nog {days} dagen {hours} uur {minutes} min {seconds} sec",
+    upcoming_empty: "Geen aankomende gebeurtenissen in de komende {days} dagen.",
+    month_empty: "Geen gebeurtenissen in {month}.",
+    attr_key_placeholder: "Naam (bv. relatie, geslacht)",
+    attr_value_placeholder: "Waarde",
+    field_firstname: "Voornaam",
+    field_lastname: "Achternaam (optioneel)",
+    field_birth_time: "Geboortetijd (optioneel, bv. van het geboortekaartje)",
+    field_date_of_death: "Datum van overlijden (alleen bij type 'Overleden')",
+    field_icon: "Icoon (optioneel, bv. mdi:cake)",
+    field_phone: "Telefoonnummer (optioneel, alleen zinvol bij 'Verjaardag'/'Jubileum')",
+    phone_placeholder: "0612345678",
+    field_custom_attrs: "Aangepaste attributen (optioneel, bv. relatie, geslacht - zelf te bepalen)",
+    action_add_attr: "+ Attribuut toevoegen",
+    confirm_delete_question: "Deze gebeurtenis verwijderen?",
+    action_delete_confirm: "Ja, verwijderen",
+    action_cancel: "Annuleren",
+    action_save: "Opslaan",
+    action_add: "Toevoegen",
+    action_delete: "Verwijderen",
+    action_edit: "Bewerken",
+    action_export: "Exporteren",
+    action_download: "Download bestand",
+    action_import: "Importeren",
+    action_close: "Sluiten",
+    action_add_button: "+ Toevoegen",
+    action_open_panel: "Beheer openen",
+    validation_required: "Voornaam en datum zijn verplicht.",
+    editor_title: "Titel",
+    editor_days_ahead: "Aantal dagen vooruit",
+    editor_show_icon: "Toon icoon",
+    editor_collapsible: "Inklapbaar (pijlknop in de kaart)",
+    editor_type_filter: "Type filter (leeg = alles)",
+    editor_columns: "Aantal kolommen (maandknoppen)",
+    editor_display_mode_label: "Weergave",
+    editor_display_mode_full: "Volledige kaart",
+    editor_display_mode_button: "Knop die als popup opent",
+    panel_choose_filter: "Kies eerst een filter (zoeken, maand, geslacht of een attribuut) om gebeurtenissen te tonen.",
+    panel_no_results: "Geen gebeurtenissen gevonden.",
+    io_format_label: "Formaat",
+    io_mode_label: "Modus bij importeren",
+    io_mode_merge: "Samenvoegen",
+    io_mode_replace: "Vervangen",
+    io_file_label: "Bestand kiezen (optioneel, vult de inhoud hieronder)",
+    io_content_label: "Inhoud (plak hier, kies een bestand hierboven, of gebruik Exporteren om te vullen)",
+    search_placeholder: "Zoek op naam...",
+    filter_all_months: "Alle maanden",
+    filter_all_genders: "Alle geslachten",
+    gender_man: "Man",
+    gender_vrouw: "Vrouw",
+    gender_anders: "Anders",
+    filter_choose_attribute: "Kies attribuut...",
+    filter_all_values: "Alle waarden",
+    manage_default_title: "Beheren",
+    status_saved: "Opgeslagen.",
+    io_file_loaded: "Bestand '{file}' geladen. Controleer de inhoud en klik op Importeren.",
+    io_file_error: "Kon '{file}' niet lezen.",
+    io_export_done: "Export klaar.",
+    io_import_nothing: "Niets om te importeren.",
+    io_import_done: "Geïmporteerd: {count} gebeurtenissen.",
   };
+
+  // Absolute directory this script itself was loaded from, used to fetch
+  // translations/<lang>.json next to it regardless of how HA mounts this
+  // integration's www/ folder (HACS path, /local/, custom extra_module_url,
+  // ...). Must be captured synchronously at the top of the script, before
+  // any `await`/callback - document.currentScript is only valid during the
+  // script's initial, synchronous execution.
+  const SCRIPT_BASE_URL = (() => {
+    const cur = document.currentScript;
+    return cur && cur.src ? cur.src.replace(/[^/]*$/, "") : "";
+  })();
+
+  // lang -> dict. "nl" is pre-seeded (it's the inline object above, never
+  // fetched); other languages are added here once their JSON file loads.
+  const translationsCache = { nl: TRANSLATIONS_NL };
+  const translationsPromises = {};
+
+  function resolveLang(hass) {
+    const raw = ((hass && hass.language) || "nl").toLowerCase();
+    const base = raw.split("-")[0];
+    return SUPPORTED_LANGS.includes(base) ? base : "en";
+  }
+
+  // Kicks off a fetch for `hass`'s language if it isn't cached yet (a no-op
+  // if it's "nl", already loaded, or already loading) and calls `onLoaded`
+  // once it lands. Safe to call on every `hass` tick - after the first
+  // successful load it does nothing further, so this never causes repeated
+  // re-renders the way a naive "reload on every tick" would.
+  function ensureTranslations(hass, onLoaded) {
+    const lang = resolveLang(hass);
+    if (lang === "nl" || translationsCache[lang]) return;
+    if (!translationsPromises[lang]) {
+      translationsPromises[lang] = fetch(`${SCRIPT_BASE_URL}translations/${lang}.json`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+        .then((json) => {
+          if (json) translationsCache[lang] = json;
+        });
+    }
+    translationsPromises[lang].then(() => {
+      if (translationsCache[lang] && onLoaded) onLoaded();
+    });
+  }
+
+  // Set at the start of every render pass (see setLangFor()) and read by
+  // t()/months()/eventTypeLabel() for the rest of that pass. A module-level
+  // variable rather than threading a `lang`/`dict` parameter through every
+  // render helper - safe because a render pass runs synchronously start to
+  // finish (nothing async happens between setLangFor() and the DOM write),
+  // so nothing else can change it mid-render.
+  let currentTranslations = TRANSLATIONS_NL;
+
+  function setLangFor(hass) {
+    currentTranslations = translationsCache[resolveLang(hass)] || TRANSLATIONS_NL;
+  }
+
+  // Looks up `key` in the current language, falling back to Dutch (always
+  // available) and finally to the raw key if truly missing. `vars`, if
+  // given, fills in `{name}` placeholders (e.g. t("upcoming_empty", { days: 14 })).
+  function t(key, vars) {
+    const dict = currentTranslations;
+    let str = (dict && dict[key] != null ? dict[key] : null) ?? (TRANSLATIONS_NL[key] != null ? TRANSLATIONS_NL[key] : null) ?? key;
+    if (vars) {
+      for (const [k, v] of Object.entries(vars)) str = str.split(`{${k}}`).join(v);
+    }
+    return str;
+  }
+
+  function months() {
+    return (currentTranslations && currentTranslations.months) || TRANSLATIONS_NL.months;
+  }
+
+  function eventTypeLabel(type) {
+    const key = `event_type_${type}`;
+    return (currentTranslations && currentTranslations[key]) || TRANSLATIONS_NL[key] || type;
+  }
 
   const EVENT_TYPE_ICONS = {
     birthday: "mdi:cake",
@@ -258,13 +414,13 @@
 
   function formatCountdown(target) {
     const diffMs = target - new Date();
-    if (diffMs <= 0) return "Vandaag!";
+    if (diffMs <= 0) return t("countdown_today");
     const totalSeconds = Math.floor(diffMs / 1000);
     const days = Math.floor(totalSeconds / 86400);
     const hours = Math.floor((totalSeconds % 86400) / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    return `Nog ${days} dagen ${hours} uur ${minutes} min ${seconds} sec`;
+    return t("countdown_format", { days, hours, minutes, seconds });
   }
 
   // Splits a stored combined name back into first/last name for the edit
@@ -288,14 +444,19 @@
   // each case decides for itself whether/how it applies dir, so a column
   // like "age" can keep missing values (deceased events have none) sorted
   // last regardless of direction instead of flipping to the top on desc.
-  const MONTH_TABLE_COLUMNS = { date: "Datum", name: "Naam", type: "Type", age: "Leeftijd" };
+  // A function (not a module-level const) since the labels depend on the
+  // current language, which can only be resolved once a card actually
+  // renders with a `hass` object.
+  function monthTableColumns() {
+    return { date: t("label_date"), name: t("label_name"), type: t("label_type"), age: t("label_age") };
+  }
 
   function compareByColumn(a, b, column, dir) {
     switch (column) {
       case "name":
         return a.name.localeCompare(b.name) * dir;
       case "type":
-        return (EVENT_TYPE_LABELS[a.eventType] || a.eventType).localeCompare(EVENT_TYPE_LABELS[b.eventType] || b.eventType) * dir;
+        return eventTypeLabel(a.eventType).localeCompare(eventTypeLabel(b.eventType)) * dir;
       case "age": {
         const av = a.eventType === "deceased" ? null : a.age;
         const bv = b.eventType === "deceased" ? null : b.age;
@@ -358,14 +519,14 @@
   // form instead).
   function renderDetailsBody(e) {
     const rows = [
-      ["Naam", e.name],
-      ["Datum", formatDate(e.date)],
-      ["Type", EVENT_TYPE_LABELS[e.eventType] || e.eventType],
+      [t("label_name"), e.name],
+      [t("label_date"), formatDate(e.date)],
+      [t("label_type"), eventTypeLabel(e.eventType)],
     ];
-    if (e.time) rows.push(["Tijd", e.time]);
-    if (e.eventType !== "deceased" && e.age != null) rows.push(["Wordt", e.age]);
-    if (e.eventType === "deceased" && e.dateOfDeath) rows.push(["Datum van overlijden", formatDate(e.dateOfDeath)]);
-    if (e.phoneNumber) rows.push(["Telefoonnummer", e.phoneNumber]);
+    if (e.time) rows.push([t("label_time"), e.time]);
+    if (e.eventType !== "deceased" && e.age != null) rows.push([t("label_becomes"), e.age]);
+    if (e.eventType === "deceased" && e.dateOfDeath) rows.push([t("label_date_of_death"), formatDate(e.dateOfDeath)]);
+    if (e.phoneNumber) rows.push([t("label_phone"), e.phoneNumber]);
     Object.entries(e.attributes || {}).forEach(([k, v]) => rows.push([k, v]));
     return rows
       .map(
@@ -389,8 +550,8 @@
       .map(
         ([k, v]) => css`
           <div class="bd-attr-row">
-            <input class="f-attr-key" placeholder="Naam (bv. relatie, geslacht)" value="${escapeAttr(k)}" />
-            <input class="f-attr-value" placeholder="Waarde" value="${escapeAttr(v)}" />
+            <input class="f-attr-key" placeholder="${escapeAttr(t("attr_key_placeholder"))}" value="${escapeAttr(k)}" />
+            <input class="f-attr-value" placeholder="${escapeAttr(t("attr_value_placeholder"))}" value="${escapeAttr(v)}" />
             <button type="button" class="bd-icon-btn" data-action="remove-attr">✕</button>
           </div>
         `
@@ -413,28 +574,28 @@
     const nameParts = splitName(editing ? editing.name : "");
     return css`
       <div class="bd-form">
-        <label>Voornaam</label>
+        <label>${t("field_firstname")}</label>
         <input id="f-firstname" value="${escapeAttr(nameParts.first)}" />
-        <label>Achternaam (optioneel)</label>
+        <label>${t("field_lastname")}</label>
         <input id="f-lastname" value="${escapeAttr(nameParts.last)}" />
-        <label>Type</label>
+        <label>${t("label_type")}</label>
         <select id="f-type">
           ${["birthday", "anniversary", "deceased"]
             .map(
-              (t) =>
-                `<option value="${t}" ${editing && editing.eventType === t ? "selected" : ""}>${EVENT_TYPE_LABELS[t]}</option>`
+              (ty) =>
+                `<option value="${ty}" ${editing && editing.eventType === ty ? "selected" : ""}>${eventTypeLabel(ty)}</option>`
             )
             .join("")}
         </select>
-        <label>Datum</label>
+        <label>${t("label_date")}</label>
         <input id="f-date" type="date" value="${editing ? editing.date : ""}" />
-        <label>Geboortetijd (optioneel, bv. van het geboortekaartje)</label>
+        <label>${t("field_birth_time")}</label>
         <input id="f-time" type="time" value="${editing && editing.time ? editing.time : ""}" />
-        <label>Datum van overlijden (alleen bij type 'Overleden')</label>
+        <label>${t("field_date_of_death")}</label>
         <input id="f-date-death" type="date" value="${editing && editing.dateOfDeath ? editing.dateOfDeath : ""}" />
-        <label>Icoon (optioneel, bv. mdi:cake)</label>
+        <label>${t("field_icon")}</label>
         <input id="f-icon" value="${editing && editing.icon ? editing.icon : ""}" />
-        <label>Telefoonnummer (optioneel, alleen zinvol bij 'Verjaardag'/'Jubileum')</label>
+        <label>${t("field_phone")}</label>
         <div style="display:flex; gap:8px;">
           ${(() => {
             const phone = fromE164(editing ? editing.phoneNumber : "");
@@ -445,29 +606,29 @@
                     `<option value="${c[0]}" ${c[0] === phone.iso2 ? "selected" : ""}>${c[2]} (+${c[1]})</option>`
                 ).join("")}
               </select>
-              <input id="f-phone-local" style="flex:1;" placeholder="0612345678" value="${phone.local}" />
+              <input id="f-phone-local" style="flex:1;" placeholder="${escapeAttr(t("phone_placeholder"))}" value="${phone.local}" />
             `;
           })()}
         </div>
-        <label>Aangepaste attributen (optioneel, bv. relatie, geslacht - zelf te bepalen)</label>
+        <label>${t("field_custom_attrs")}</label>
         <div id="f-attrs-rows">${attrRowsHtml(editing ? editing.attributes : {})}</div>
-        <button type="button" class="bd-btn secondary" data-action="add-attr">+ Attribuut toevoegen</button>
+        <button type="button" class="bd-btn secondary" data-action="add-attr">${t("action_add_attr")}</button>
         ${
           editing && confirmDelete
             ? css`
               <div class="bd-confirm">
-                <span>Deze gebeurtenis verwijderen?</span>
+                <span>${t("confirm_delete_question")}</span>
                 <div class="bd-actions">
-                  <button class="bd-btn danger" data-action="delete-confirm" data-id="${editingId}">Ja, verwijderen</button>
-                  <button class="bd-btn secondary" data-action="delete-cancel">Annuleren</button>
+                  <button class="bd-btn danger" data-action="delete-confirm" data-id="${editingId}">${t("action_delete_confirm")}</button>
+                  <button class="bd-btn secondary" data-action="delete-cancel">${t("action_cancel")}</button>
                 </div>
               </div>
             `
             : css`
               <div class="bd-actions">
-                <button class="bd-btn" data-action="save">${editing ? "Opslaan" : "Toevoegen"}</button>
-                <button class="bd-btn secondary" data-action="cancel">Annuleren</button>
-                ${editing ? `<button class="bd-btn danger" data-action="delete" data-id="${editingId}">Verwijderen</button>` : ""}
+                <button class="bd-btn" data-action="save">${editing ? t("action_save") : t("action_add")}</button>
+                <button class="bd-btn secondary" data-action="cancel">${t("action_cancel")}</button>
+                ${editing ? `<button class="bd-btn danger" data-action="delete" data-id="${editingId}">${t("action_delete")}</button>` : ""}
               </div>
             `
         }
@@ -495,7 +656,7 @@
     const phoneLocal = root.querySelector("#f-phone-local").value.trim();
 
     if (!firstName || !dateVal) {
-      return { ok: false, message: "Voornaam en datum zijn verplicht." };
+      return { ok: false, message: t("validation_required") };
     }
 
     const data = { name, event_type: eventType, date: dateVal };
@@ -587,7 +748,7 @@
       : css`
           ${renderDetailsBody(detailsEvent)}
           <button type="button" class="bd-btn bd-details-edit-btn" data-action="start-edit">
-            <ha-icon icon="mdi:pencil"></ha-icon> Bewerken
+            <ha-icon icon="mdi:pencil"></ha-icon> ${t("action_edit")}
           </button>
         `;
     return modalWrap(title, body, formMode ? "cancel" : "close-details");
@@ -691,13 +852,13 @@
   function renderEventTypeCheckboxes(selectedTypes) {
     const selected = selectedTypes || [];
     return css`
-      <div class="le-editor-label">Type filter (leeg = alles)</div>
+      <div class="le-editor-label">${t("editor_type_filter")}</div>
       <div class="le-editor-types">
         ${["birthday", "anniversary", "deceased"]
           .map(
-            (t) => css`
-              <ha-formfield label="${EVENT_TYPE_LABELS[t]}">
-                <ha-checkbox data-type="${t}" ${selected.includes(t) ? "checked" : ""}></ha-checkbox>
+            (ty) => css`
+              <ha-formfield label="${eventTypeLabel(ty)}">
+                <ha-checkbox data-type="${ty}" ${selected.includes(ty) ? "checked" : ""}></ha-checkbox>
               </ha-formfield>
             `
           )
@@ -733,6 +894,12 @@
 
     set hass(hass) {
       this._hass = hass;
+      // Kicks off a fetch for this hass's language the first time it's
+      // seen; a no-op once cached (see ensureTranslations()). The callback
+      // only fires once per language, right after it first loads - not on
+      // every subsequent tick - so this doesn't fight with the render
+      // suppression below or wipe in-progress typing.
+      ensureTranslations(hass, () => this._render());
       // Skip re-rendering while a modal is open (add/edit form, import
       // panel, details popup, ...): hass updates fire on *any* entity's
       // state change anywhere in HA, and a full re-render would wipe out
@@ -867,6 +1034,7 @@
 
     _render() {
       if (!this._hass) return;
+      setLangFor(this._hass);
       const daysAhead = this._config.days_ahead ?? 14;
       const events = getEvents(this._hass, this._config.event_types)
         .filter((e) => e.days <= daysAhead)
@@ -881,16 +1049,16 @@
                   ${this._config.show_icon === false ? "" : `<ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>`}
                   <div>
                     <div class="bd-name">${e.name}</div>
-                    <div class="bd-secondary">${formatDate(e.date)} &middot; ${EVENT_TYPE_LABELS[e.eventType] || e.eventType}${e.eventType !== "deceased" && e.age != null ? ` &middot; wordt ${e.age}` : ""}</div>
+                    <div class="bd-secondary">${formatDate(e.date)} &middot; ${eventTypeLabel(e.eventType)}${e.eventType !== "deceased" && e.age != null ? ` &middot; ${t("inline_becomes", { age: e.age })}` : ""}</div>
                     ${i === 0 ? `<div class="bd-secondary" id="le-countdown"></div>` : ""}
                   </div>
                 </div>
-                <div class="bd-badge">${e.days === 0 ? "Vandaag!" : e.days}</div>
+                <div class="bd-badge">${e.days === 0 ? t("countdown_today") : e.days}</div>
               </div>
             `
             )
             .join("")
-        : `<div class="bd-empty">Geen aankomende gebeurtenissen in de komende ${daysAhead} dagen.</div>`;
+        : `<div class="bd-empty">${t("upcoming_empty", { days: daysAhead })}</div>`;
 
       // Looked up from the full, unfiltered event list (not the days_ahead-
       // filtered `events` above) so the popup still works even for an event
@@ -986,17 +1154,23 @@
     }
     set hass(hass) {
       this._hass = hass;
+      // Fires _render() once, the first time this hass's language finishes
+      // loading - not on every tick - so it's safe even though the editor
+      // has no other re-render protection (see ensureTranslations()).
+      ensureTranslations(hass, () => this._render());
     }
     _render() {
+      if (!this._config) return;
+      setLangFor(this._hass);
       this.innerHTML = css`
         ${EDITOR_STYLE}
         <div class="le-editor">
-          ${renderEditorField("title", "Titel", this._config.title ?? "")}
-          ${renderEditorField("days_ahead", "Aantal dagen vooruit", this._config.days_ahead ?? 14, 'type="number" min="1"')}
-          <ha-formfield label="Toon icoon">
+          ${renderEditorField("title", t("editor_title"), this._config.title ?? "")}
+          ${renderEditorField("days_ahead", t("editor_days_ahead"), this._config.days_ahead ?? 14, 'type="number" min="1"')}
+          <ha-formfield label="${t("editor_show_icon")}">
             <ha-switch id="show_icon" ${this._config.show_icon !== false ? "checked" : ""}></ha-switch>
           </ha-formfield>
-          <ha-formfield label="Inklapbaar (pijlknop in de kaart)">
+          <ha-formfield label="${t("editor_collapsible")}">
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
           ${renderEventTypeCheckboxes(this._config.event_types)}
@@ -1067,10 +1241,11 @@
 
     _render() {
       if (!this._hass) return;
+      setLangFor(this._hass);
       const events = getEvents(this._hass, this._config.event_types);
       const columns = this._config.columns || 3;
 
-      const buttons = MONTHS_NL.map((label, idx) => {
+      const buttons = months().map((label, idx) => {
         const monthNr = idx + 1;
         const count = events.filter((e) => monthOf(e.date) === monthNr).length;
         const selected = monthNr === this._selectedMonth;
@@ -1097,7 +1272,7 @@
         ? css`
           <table class="bd-table">
             <tr>
-              ${Object.entries(MONTH_TABLE_COLUMNS)
+              ${Object.entries(monthTableColumns())
                 .map(([col, label]) => `<th data-sort="${col}">${label}${this._sortIndicator(col)}</th>`)
                 .join("")}
             </tr>
@@ -1107,7 +1282,7 @@
                 <tr data-action="details" data-id="${e.entity_id.split(".")[1]}">
                   <td>${formatDate(e.date)}</td>
                   <td>${e.name}</td>
-                  <td><span class="bd-type-badge">${EVENT_TYPE_LABELS[e.eventType] || e.eventType}</span></td>
+                  <td><span class="bd-type-badge">${eventTypeLabel(e.eventType)}</span></td>
                   <td>${e.eventType === "deceased" ? "" : e.age ?? ""}</td>
                 </tr>
               `
@@ -1115,7 +1290,7 @@
               .join("")}
           </table>
         `
-        : `<div class="bd-empty">Geen gebeurtenissen in ${MONTHS_NL[this._selectedMonth - 1]}.</div>`;
+        : `<div class="bd-empty">${t("month_empty", { month: months()[this._selectedMonth - 1] })}</div>`;
 
       const detailsEvent = this._detailsId
         ? getEvents(this._hass, null).find((e) => e.entity_id.split(".")[1] === this._detailsId)
@@ -1198,14 +1373,17 @@
     }
     set hass(hass) {
       this._hass = hass;
+      ensureTranslations(hass, () => this._render());
     }
     _render() {
+      if (!this._config) return;
+      setLangFor(this._hass);
       this.innerHTML = css`
         ${EDITOR_STYLE}
         <div class="le-editor">
-          ${renderEditorField("title", "Titel", this._config.title ?? "")}
-          ${renderEditorField("columns", "Aantal kolommen (maandknoppen)", this._config.columns ?? 3, 'type="number" min="1" max="6"')}
-          <ha-formfield label="Inklapbaar (pijlknop in de kaart)">
+          ${renderEditorField("title", t("editor_title"), this._config.title ?? "")}
+          ${renderEditorField("columns", t("editor_columns"), this._config.columns ?? 3, 'type="number" min="1" max="6"')}
+          <ha-formfield label="${t("editor_collapsible")}">
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
           ${renderEventTypeCheckboxes(this._config.event_types)}
@@ -1263,6 +1441,7 @@
     set hass(hass) {
       const firstRender = !this._hass;
       this._hass = hass;
+      ensureTranslations(hass, () => this._render());
       if (firstRender) {
         this._render();
       } else if (!this._suppressRender) {
@@ -1301,7 +1480,7 @@
       const anyFilterActive =
         q || this._monthFilter || this._genderFilter || (this._attrFilterKey && this._attrFilterValue);
       if (!anyFilterActive) {
-        return `<div class="bd-empty">Kies eerst een filter (zoeken, maand, geslacht of een attribuut) om gebeurtenissen te tonen.</div>`;
+        return `<div class="bd-empty">${t("panel_choose_filter")}</div>`;
       }
 
       const events = this._baseEvents()
@@ -1326,7 +1505,7 @@
                   <ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>
                   <div>
                     <div class="bd-name">${e.name}</div>
-                    <div class="bd-secondary">${formatDate(e.date)} &middot; <span class="bd-type-badge">${EVENT_TYPE_LABELS[e.eventType] || e.eventType}</span></div>
+                    <div class="bd-secondary">${formatDate(e.date)} &middot; <span class="bd-type-badge">${eventTypeLabel(e.eventType)}</span></div>
                     ${Object.keys(e.attributes).length
                       ? `<div class="bd-secondary">${Object.entries(e.attributes)
                           .map(([k, v]) => `${escapeAttr(k)}: ${escapeAttr(v)}`)
@@ -1338,7 +1517,7 @@
             `
             )
             .join("")
-        : `<div class="bd-empty">Geen gebeurtenissen gevonden.</div>`;
+        : `<div class="bd-empty">${t("panel_no_results")}</div>`;
     }
 
     // Targeted update: only replaces the list container, so the search
@@ -1347,6 +1526,7 @@
     _renderList() {
       const list = this.shadowRoot.querySelector("#le-list");
       if (!list) return;
+      setLangFor(this._hass);
       list.innerHTML = this._rowsHtml();
       this._bindListEvents();
     }
@@ -1365,6 +1545,7 @@
 
     _render() {
       if (!this._hass) return;
+      setLangFor(this._hass);
       const isButtonMode = this._config.display_mode === "button";
 
       // Auto-open the add-form once, the first time we have real data and
@@ -1392,26 +1573,26 @@
 
       const importExportBody = css`
         <div class="bd-form">
-          <label>Formaat</label>
+          <label>${t("io_format_label")}</label>
           <select id="io-format">
             <option value="json">JSON</option>
             <option value="csv">CSV</option>
           </select>
-          <label>Modus bij importeren</label>
+          <label>${t("io_mode_label")}</label>
           <select id="io-mode">
-            <option value="merge">Samenvoegen</option>
-            <option value="replace">Vervangen</option>
+            <option value="merge">${t("io_mode_merge")}</option>
+            <option value="replace">${t("io_mode_replace")}</option>
           </select>
-          <label>Bestand kiezen (optioneel, vult de inhoud hieronder)</label>
+          <label>${t("io_file_label")}</label>
           <input id="io-file" type="file" accept=".json,.csv,application/json,text/csv" />
           <div id="io-file-status" class="bd-secondary"></div>
-          <label>Inhoud (plak hier, kies een bestand hierboven, of gebruik Exporteren om te vullen)</label>
+          <label>${t("io_content_label")}</label>
           <textarea id="io-content" rows="6"></textarea>
           <div class="bd-actions">
-            <button class="bd-btn" data-action="export">Exporteren</button>
-            <button class="bd-btn" data-action="download">Download bestand</button>
-            <button class="bd-btn secondary" data-action="import">Importeren</button>
-            <button class="bd-btn secondary" data-action="close-io">Sluiten</button>
+            <button class="bd-btn" data-action="export">${t("action_export")}</button>
+            <button class="bd-btn" data-action="download">${t("action_download")}</button>
+            <button class="bd-btn secondary" data-action="import">${t("action_import")}</button>
+            <button class="bd-btn secondary" data-action="close-io">${t("action_close")}</button>
           </div>
         </div>
       `;
@@ -1421,23 +1602,23 @@
 
       const panelBody = css`
         <div class="bd-filters">
-          <input id="f-search" placeholder="Zoek op naam..." value="${this._searchQuery}" />
+          <input id="f-search" placeholder="${escapeAttr(t("search_placeholder"))}" value="${this._searchQuery}" />
           <select id="f-month-filter">
-            <option value="">Alle maanden</option>
-            ${MONTHS_NL.map(
+            <option value="">${t("filter_all_months")}</option>
+            ${months().map(
               (m, i) => `<option value="${i + 1}" ${Number(this._monthFilter) === i + 1 ? "selected" : ""}>${m}</option>`
             ).join("")}
           </select>
           <select id="f-gender-filter">
-            <option value="">Alle geslachten</option>
-            <option value="man" ${this._genderFilter === "man" ? "selected" : ""}>Man</option>
-            <option value="vrouw" ${this._genderFilter === "vrouw" ? "selected" : ""}>Vrouw</option>
-            <option value="anders" ${this._genderFilter === "anders" ? "selected" : ""}>Anders</option>
+            <option value="">${t("filter_all_genders")}</option>
+            <option value="man" ${this._genderFilter === "man" ? "selected" : ""}>${t("gender_man")}</option>
+            <option value="vrouw" ${this._genderFilter === "vrouw" ? "selected" : ""}>${t("gender_vrouw")}</option>
+            <option value="anders" ${this._genderFilter === "anders" ? "selected" : ""}>${t("gender_anders")}</option>
           </select>
           ${attrKeys.length
             ? css`
               <select id="f-attr-key-filter">
-                <option value="">Kies attribuut...</option>
+                <option value="">${t("filter_choose_attribute")}</option>
                 ${attrKeys
                   .map((k) => `<option value="${escapeAttr(k)}" ${this._attrFilterKey === k ? "selected" : ""}>${escapeAttr(k)}</option>`)
                   .join("")}
@@ -1445,7 +1626,7 @@
               ${this._attrFilterKey
                 ? css`
                   <select id="f-attr-value-filter">
-                    <option value="">Alle waarden</option>
+                    <option value="">${t("filter_all_values")}</option>
                     ${attrValues
                       .map((v) => `<option value="${escapeAttr(v)}" ${this._attrFilterValue === v ? "selected" : ""}>${escapeAttr(v)}</option>`)
                       .join("")}
@@ -1456,8 +1637,8 @@
             : ""}
         </div>
         <div class="bd-actions">
-          ${!this._formOpen ? `<button class="bd-btn" data-action="add">+ Toevoegen</button>` : ""}
-          ${!this._importOpen ? `<button class="bd-btn secondary" data-action="io">Import / export</button>` : ""}
+          ${!this._formOpen ? `<button class="bd-btn" data-action="add">${t("action_add_button")}</button>` : ""}
+          ${!this._importOpen ? `<button class="bd-btn secondary" data-action="io">${t("label_import_export")}</button>` : ""}
         </div>
         <div id="le-list">${this._rowsHtml()}</div>
         ${this._status ? `<div class="bd-secondary" style="margin-top:8px;">${this._status}</div>` : ""}
@@ -1466,14 +1647,14 @@
       const mainHtml = isButtonMode
         ? this._panelOpen
           ? ""
-          : css`<button class="bd-btn" data-action="open-panel">Beheer openen</button>`
+          : css`<button class="bd-btn" data-action="open-panel">${t("action_open_panel")}</button>`
         : panelBody;
 
       this._shell(css`
         ${mainHtml}
-        ${isButtonMode && this._panelOpen ? modalWrap(this._config.title || "Beheren", panelBody, "close-panel") : ""}
-        ${this._formOpen ? modalWrap(editing ? "Bewerken" : "Toevoegen", formBody, "cancel") : ""}
-        ${this._importOpen ? modalWrap("Import / export", importExportBody, "close-io") : ""}
+        ${isButtonMode && this._panelOpen ? modalWrap(this._config.title || t("manage_default_title"), panelBody, "close-panel") : ""}
+        ${this._formOpen ? modalWrap(editing ? t("action_edit") : t("action_add"), formBody, "cancel") : ""}
+        ${this._importOpen ? modalWrap(t("label_import_export"), importExportBody, "close-io") : ""}
       `);
 
       this._bindEvents();
@@ -1508,7 +1689,7 @@
           }
           this._formOpen = false;
           this._editingId = null;
-          this._status = "Opgeslagen.";
+          this._status = t("status_saved");
           this._render();
         },
         onCancel: () => {
@@ -1622,10 +1803,10 @@
         } else if (/\.json$/i.test(file.name)) {
           root.querySelector("#io-format").value = "json";
         }
-        statusEl.textContent = `Bestand '${file.name}' geladen. Controleer de inhoud en klik op Importeren.`;
+        statusEl.textContent = t("io_file_loaded", { file: file.name });
       };
       reader.onerror = () => {
-        statusEl.textContent = `Kon '${file.name}' niet lezen.`;
+        statusEl.textContent = t("io_file_error", { file: file.name });
       };
       reader.readAsText(file);
     }
@@ -1644,7 +1825,7 @@
       } else {
         root.querySelector("#io-content").value = content;
       }
-      root.querySelector("#io-file-status").textContent = "Export klaar.";
+      root.querySelector("#io-file-status").textContent = t("io_export_done");
     }
 
     async _import() {
@@ -1653,12 +1834,12 @@
       const mode = root.querySelector("#io-mode").value;
       const content = root.querySelector("#io-content").value;
       if (!content.trim()) {
-        this._status = "Niets om te importeren.";
+        this._status = t("io_import_nothing");
         this._render();
         return;
       }
       const response = await callService(this._hass, "import_events", { content, format, mode }, true);
-      this._status = `Geïmporteerd: ${response?.imported ?? 0} gebeurtenissen.`;
+      this._status = t("io_import_done", { count: response?.imported ?? 0 });
       this._render();
     }
 
@@ -1675,22 +1856,25 @@
     }
     set hass(hass) {
       this._hass = hass;
+      ensureTranslations(hass, () => this._render());
     }
     _render() {
+      if (!this._config) return;
+      setLangFor(this._hass);
       this.innerHTML = css`
         ${EDITOR_STYLE}
         <div class="le-editor">
-          ${renderEditorField("title", "Titel", this._config.title ?? "")}
+          ${renderEditorField("title", t("editor_title"), this._config.title ?? "")}
           ${renderEditorSelect(
             "display_mode",
-            "Weergave",
+            t("editor_display_mode_label"),
             [
-              ["full", "Volledige kaart"],
-              ["button", "Knop die als popup opent"],
+              ["full", t("editor_display_mode_full")],
+              ["button", t("editor_display_mode_button")],
             ],
             this._config.display_mode || "full"
           )}
-          <ha-formfield label="Inklapbaar (pijlknop in de kaart)">
+          <ha-formfield label="${t("editor_collapsible")}">
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
           ${renderEventTypeCheckboxes(this._config.event_types)}
@@ -1719,22 +1903,28 @@
   customElements.define("life-events-manage-card", LifeEventsManageCard);
   customElements.define("life-events-manage-card-editor", LifeEventsManageCardEditor);
 
+  // These 3 entries populate HA's "Add card" picker, which renders before
+  // any card ever gets a `hass` object - there's no language to detect yet,
+  // so unlike everything else in this file these are NOT run through t().
+  // English is used directly (rather than Dutch) as the more broadly
+  // understood default for a picker UI shown to every user regardless of
+  // their configured language.
   window.customCards = window.customCards || [];
   window.customCards.push(
     {
       type: "life-events-upcoming-card",
       name: "Life Events: Upcoming",
-      description: "Lijst van aankomende verjaardagen, jubilea en herdenkingen.",
+      description: "List of upcoming birthdays, anniversaries and remembrances.",
     },
     {
       type: "life-events-month-card",
       name: "Life Events: Month overview",
-      description: "Maandknoppen + tabel, zoals het originele verjaardagen-dashboard.",
+      description: "Month buttons + table, like the original birthdays dashboard.",
     },
     {
       type: "life-events-manage-card",
       name: "Life Events: Manage",
-      description: "Toevoegen, bewerken, verwijderen, importeren en exporteren.",
+      description: "Add, edit, delete, import and export.",
     }
   );
 })();

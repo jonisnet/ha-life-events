@@ -9,5 +9,27 @@
     "abort": {
       "single_instance_allowed": "Life Events is already set up. Only one instance is needed."
     }
+  },
+  "services": {
+    "add_event": {
+      "name": "Add event",
+      "description": "Add a birthday, anniversary or deceased entry."
+    },
+    "update_event": {
+      "name": "Update event",
+      "description": "Update an existing event. Only the provided fields are changed."
+    },
+    "delete_event": {
+      "name": "Delete event",
+      "description": "Remove an event."
+    },
+    "import_events": {
+      "name": "Import events",
+      "description": "Bulk import events from a CSV or JSON string."
+    },
+    "export_events": {
+      "name": "Export events",
+      "description": "Export all events as a CSV or JSON string."
+    }
   }
 }
