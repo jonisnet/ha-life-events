@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.2-beta.13 — unreleased
+## 0.0.2-beta.13
 
 ### Added
 - **Tasteful "years since deceased" display**, replacing the blank
