@@ -3,7 +3,7 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
-## 0.0.3-beta.2 — unreleased
+## 0.0.3-beta.3 — unreleased
 
 ### Fixed
 - **Typing in a card's visual editor (e.g. the Titel field) could lose the
@@ -35,11 +35,27 @@ are cut until noted otherwise.
     bar. Fixed by routing through the existing guarded paths
     (`_safeRerender()` for Upcoming/Month, `_renderList()` for Manage)
     instead of calling `_render()` directly.
+- **Rows in a live card (not just editors) could flicker on hover.** Every
+  hass tick (any entity's state changing anywhere in HA, not just this
+  integration's own) fully rebuilt the Upcoming/Month cards' shadow DOM and
+  the Manage card's row list, even when nothing they actually show had
+  changed - tearing down and recreating whatever the mouse happened to be
+  hovering flashes the `:hover` style off and back on. Fixed by skipping
+  the rebuild when the freshly-computed markup is byte-identical to last
+  time (`_lastBodyHtml`/`_lastRowsHtml`), invalidated whenever a real
+  config or state change means the comparison could otherwise miss one -
+  including a genuine bug this surfaced along the way: the Manage card's
+  targeted list update could go stale relative to a full re-render that
+  had happened in between (e.g. switching which custom attribute to filter
+  by), occasionally leaving a filtered row unclickable until something else
+  forced a refresh.
 
-Verified with a new 5-check runtime test that simulates HA's real
-(delayed, not just-a-microtask) config echo interleaved with fast typing
-and a mid-typing fixed-attributes load, plus the full existing regression
-suite (116 checks, all still passing).
+Verified with a new 5-check runtime test simulating HA's real (delayed,
+not just-a-microtask) config echo interleaved with fast typing and a
+mid-typing fixed-attributes load, plus a new 4-check test confirming row
+DOM nodes survive an unrelated hass tick in all three cards while still
+updating on a real data change, plus the full existing regression suite
+(124 checks total, all passing).
 
 ## 0.0.3-beta.1
 

@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.3-beta.2 loaded");
+  console.info("Life Events cards: v0.0.3-beta.3 loaded");
 
   const DOMAIN = "life_events";
 
@@ -1133,6 +1133,12 @@
 
     setConfig(config) {
       this._config = config || {};
+      // Invalidates the "skip render if the body markup is unchanged"
+      // cache some subclasses keep (see LifeEventsUpcomingCard/
+      // LifeEventsMonthCard's _render()) - a real config change (title,
+      // collapsible, columns, ...) must always take effect even if it
+      // wouldn't otherwise change the computed row markup.
+      this._lastBodyHtml = null;
       this._render();
     }
 
@@ -1258,6 +1264,13 @@
       if (collapsible) {
         this.shadowRoot.querySelector('[data-action="toggle-collapse"]').addEventListener("click", () => {
           this._collapsed = !this._collapsed;
+          // _collapsed lives outside bodyHtml (it only affects _shell()'s
+          // own wrapper, not the row/table content some subclasses diff
+          // against to skip redundant hass-tick renders - see
+          // LifeEventsUpcomingCard/LifeEventsMonthCard's _render()), so
+          // that cache must be invalidated here or toggling collapse would
+          // look like "nothing changed" and silently do nothing.
+          this._lastBodyHtml = null;
           this._render();
         });
       }
@@ -1322,10 +1335,22 @@
         ? getEvents(this._hass, null).find((e) => e.entity_id.split(".")[1] === this._detailsId)
         : null;
 
-      this._shell(css`
+      const bodyHtml = css`
         ${rows}
         ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete)}
-      `);
+      `;
+
+      // Most hass ticks are caused by some unrelated entity elsewhere in HA
+      // and don't actually change anything this card shows - skip the full
+      // shadow-DOM rebuild (which would also tear down and recreate
+      // whatever the mouse happens to be hovering, flashing the :hover
+      // style off and back on) when the computed markup is byte-identical
+      // to last time. setConfig() clears this cache so a real config
+      // change (title, collapsible, ...) always still takes effect.
+      if (bodyHtml === this._lastBodyHtml) return;
+      this._lastBodyHtml = bodyHtml;
+
+      this._shell(bodyHtml);
 
       this.shadowRoot.querySelectorAll('[data-action="details"]').forEach((row) =>
         row.addEventListener("click", () => {
@@ -1571,11 +1596,19 @@
         ? getEvents(this._hass, null).find((e) => e.entity_id.split(".")[1] === this._detailsId)
         : null;
 
-      this._shell(css`
+      const bodyHtml = css`
         <div class="bd-months">${buttons}</div>
         ${table}
         ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete)}
-      `);
+      `;
+
+      // See LifeEventsUpcomingCard._render() for why this skips the full
+      // rebuild (and the :hover flicker that comes with it) when nothing
+      // this card actually shows has changed.
+      if (bodyHtml === this._lastBodyHtml) return;
+      this._lastBodyHtml = bodyHtml;
+
+      this._shell(bodyHtml);
 
       this.shadowRoot.querySelectorAll(".bd-month-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -1828,7 +1861,16 @@
       const list = this.shadowRoot.querySelector("#le-list");
       if (!list) return;
       setLangFor(this._hass);
-      list.innerHTML = this._rowsHtml();
+      const rowsHtml = this._rowsHtml();
+      // Same reasoning as LifeEventsUpcomingCard._render(): most hass ticks
+      // don't change anything this list actually shows, so skip rebuilding
+      // it (and flashing whatever row the mouse is hovering) when the
+      // computed markup is unchanged. Search/filter input changes go
+      // through this same method but always produce different markup (the
+      // filter itself changed), so they're unaffected by this check.
+      if (rowsHtml === this._lastRowsHtml) return;
+      this._lastRowsHtml = rowsHtml;
+      list.innerHTML = rowsHtml;
       this._bindListEvents();
     }
 
@@ -1847,6 +1889,15 @@
     _render() {
       if (!this._hass) return;
       setLangFor(this._hass);
+      // A full _render() rebuilds #le-list fresh (e.g. when the attribute
+      // filter's key changes and the value dropdown needs to appear/
+      // disappear) without going through _renderList()'s cache below -
+      // invalidate it here so a later _renderList() call can't wrongly
+      // compare against a rowsHtml string left over from before this
+      // rebuild and skip a genuinely-needed update just because two
+      // different filter states happen to produce identical markup (e.g.
+      // "gender=vrouw" and "search=Marlene" both showing just her row).
+      this._lastRowsHtml = null;
       const isButtonMode = this._config.display_mode === "button";
 
       // Auto-open the add-form once, the first time we have real data and
