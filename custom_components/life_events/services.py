@@ -7,6 +7,9 @@ from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, Supp
 import homeassistant.helpers.config_validation as cv
 
 from .const import (
+    CONF_FIXED_ATTR_KEY,
+    CONF_FIXED_ATTR_OPTIONS,
+    CONF_FIXED_ATTRIBUTES,
     DOMAIN,
     EVENT_TYPES,
     FORMAT_CSV,
@@ -16,7 +19,9 @@ from .const import (
     SERVICE_ADD_EVENT,
     SERVICE_DELETE_EVENT,
     SERVICE_EXPORT_EVENTS,
+    SERVICE_GET_FIXED_ATTRIBUTES,
     SERVICE_IMPORT_EVENTS,
+    SERVICE_SET_FIXED_ATTRIBUTES,
     SERVICE_UPDATE_EVENT,
 )
 
@@ -60,6 +65,17 @@ IMPORT_EVENTS_SCHEMA = vol.Schema(
 
 EXPORT_EVENTS_SCHEMA = vol.Schema({vol.Optional("format", default=FORMAT_JSON): vol.In([FORMAT_CSV, FORMAT_JSON])})
 
+FIXED_ATTRIBUTE_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_FIXED_ATTR_KEY): cv.string,
+        vol.Optional(CONF_FIXED_ATTR_OPTIONS): [cv.string],
+    }
+)
+
+SET_FIXED_ATTRIBUTES_SCHEMA = vol.Schema(
+    {vol.Required(CONF_FIXED_ATTRIBUTES): [FIXED_ATTRIBUTE_SCHEMA]}
+)
+
 
 def _manager_for_call(hass: HomeAssistant, call: ServiceCall):
     """There is only ever a single config entry (single_instance_allowed)."""
@@ -102,11 +118,21 @@ def async_register_services(hass: HomeAssistant) -> None:
         manager = _manager_for_call(hass, call)
         return {"content": manager.export_events(call.data["format"]), "format": call.data["format"]}
 
+    async def _set_fixed_attributes(call: ServiceCall) -> None:
+        manager = _manager_for_call(hass, call)
+        await manager.async_set_fixed_attributes(call.data[CONF_FIXED_ATTRIBUTES])
+
+    async def _get_fixed_attributes(call: ServiceCall) -> ServiceResponse:
+        manager = _manager_for_call(hass, call)
+        return {CONF_FIXED_ATTRIBUTES: manager.fixed_attributes}
+
     hass.services.async_register(DOMAIN, SERVICE_ADD_EVENT, _add_event, schema=ADD_EVENT_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, SERVICE_UPDATE_EVENT, _update_event, schema=UPDATE_EVENT_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, SERVICE_DELETE_EVENT, _delete_event, schema=DELETE_EVENT_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_IMPORT_EVENTS, _import_events, schema=IMPORT_EVENTS_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, SERVICE_EXPORT_EVENTS, _export_events, schema=EXPORT_EVENTS_SCHEMA, supports_response=SupportsResponse.ONLY)
+    hass.services.async_register(DOMAIN, SERVICE_SET_FIXED_ATTRIBUTES, _set_fixed_attributes, schema=SET_FIXED_ATTRIBUTES_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_GET_FIXED_ATTRIBUTES, _get_fixed_attributes, schema=vol.Schema({}), supports_response=SupportsResponse.ONLY)
 
 
 def async_unregister_services(hass: HomeAssistant) -> None:
@@ -118,5 +144,7 @@ def async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_DELETE_EVENT,
         SERVICE_IMPORT_EVENTS,
         SERVICE_EXPORT_EVENTS,
+        SERVICE_SET_FIXED_ATTRIBUTES,
+        SERVICE_GET_FIXED_ATTRIBUTES,
     ):
         hass.services.async_remove(DOMAIN, service)

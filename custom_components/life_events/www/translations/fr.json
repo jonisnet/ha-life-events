@@ -73,5 +73,15 @@
   "io_file_error": "Impossible de lire '{file}'.",
   "io_export_done": "Export terminé.",
   "io_import_nothing": "Rien à importer.",
-  "io_import_done": "Importé : {count} événements."
+  "io_import_done": "Importé : {count} événements.",
+  "fixed_attr_choose": "-- choisir --",
+  "validation_required_fixed": "{key} est obligatoire.",
+  "fixed_attrs_section_title": "Attributs fixes (obligatoires)",
+  "fixed_attrs_section_hint": "Ils s'appliquent à toute l'installation et apparaissent comme champs obligatoires sur chaque formulaire de modification.",
+  "fixed_attr_key_placeholder": "Nom (ex. genre)",
+  "fixed_attr_kind_text": "Texte libre",
+  "fixed_attr_kind_dropdown": "Liste déroulante",
+  "fixed_attr_options_placeholder": "Options, séparées par des virgules (ex. Homme, Femme, Autre)",
+  "action_add_fixed_attr": "+ Ajouter un attribut fixe",
+  "action_save_fixed_attrs": "Enregistrer les attributs fixes"
 }

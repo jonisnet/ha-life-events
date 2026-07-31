@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.2-beta.11 loaded");
+  console.info("Life Events cards: v0.0.2-beta.12 loaded");
 
   const DOMAIN = "life_events";
 
@@ -140,6 +140,16 @@
     io_export_done: "Export klaar.",
     io_import_nothing: "Niets om te importeren.",
     io_import_done: "Geïmporteerd: {count} gebeurtenissen.",
+    fixed_attr_choose: "-- kies --",
+    validation_required_fixed: "{key} is verplicht.",
+    fixed_attrs_section_title: "Vaste (verplichte) attributen",
+    fixed_attrs_section_hint: "Deze gelden voor de hele installatie en verschijnen verplicht op elk bewerkformulier.",
+    fixed_attr_key_placeholder: "Naam (bv. geslacht)",
+    fixed_attr_kind_text: "Vrije tekst",
+    fixed_attr_kind_dropdown: "Keuzelijst",
+    fixed_attr_options_placeholder: "Opties, komma-gescheiden (bv. Man, Vrouw, Anders)",
+    action_add_fixed_attr: "+ Vast attribuut toevoegen",
+    action_save_fixed_attrs: "Vaste attributen opslaan",
   };
 
   // Absolute directory this script itself was loaded from, used to fetch
@@ -216,6 +226,47 @@
   function eventTypeLabel(type) {
     const key = `event_type_${type}`;
     return (currentTranslations && currentTranslations[key]) || TRANSLATIONS_NL[key] || type;
+  }
+
+  // ---------------------------------------------------------------------
+  // Fixed (required) custom-attribute schema: e.g. a required "geslacht"
+  // dropdown with Man/Vrouw/Anders. Configured once, install-wide, via the
+  // Manage card's editor (see LifeEventsManageCardEditor) - not hardcoded
+  // into the integration, since it shouldn't be forced on other installs -
+  // and then rendered + enforced on every card's add/edit form. Each
+  // definition is `{ key, options }`: `options` absent means a required
+  // free-text field, present means a required dropdown restricted to those
+  // values. The backend (manager.py's _check_required_attributes) enforces
+  // the same rule independently of this UI, for direct service/automation
+  // calls that bypass the cards entirely.
+  //
+  // Loaded lazily via the get_fixed_attributes service and cached at module
+  // level - the same once-per-session pattern as translations (see
+  // ensureTranslations), since this rarely changes and every render/form
+  // needs synchronous access to it. A save from the editor updates this
+  // cache directly (see LifeEventsManageCardEditor's save-fixed-attrs
+  // handler) so that tab reflects the change immediately; other already-
+  // open cards/tabs pick it up on their own next load, same tradeoff as
+  // every other piece of config in this file.
+  let fixedAttrsCache = [];
+  let fixedAttrsLoaded = false;
+  let fixedAttrsPromise = null;
+
+  function ensureFixedAttributes(hass, onLoaded) {
+    if (fixedAttrsLoaded || !hass) return;
+    if (!fixedAttrsPromise) {
+      fixedAttrsPromise = callService(hass, "get_fixed_attributes", {}, true)
+        .then((res) => {
+          fixedAttrsCache = (res && res.fixed_attributes) || [];
+        })
+        .catch(() => {})
+        .then(() => {
+          fixedAttrsLoaded = true;
+        });
+    }
+    fixedAttrsPromise.then(() => {
+      if (onLoaded) onLoaded();
+    });
   }
 
   const EVENT_TYPE_ICONS = {
@@ -567,6 +618,48 @@
     );
   }
 
+  // Custom attributes minus the ones that have their own dedicated required
+  // field now (see fixedAttributeFieldsHtml) - otherwise a fixed attribute
+  // like "geslacht" would show up twice: once as its own required field,
+  // once again as an editable freeform row underneath.
+  function freeformAttributesOf(attrs) {
+    const fixedKeys = new Set(fixedAttrsCache.map((fa) => fa.key));
+    const out = {};
+    Object.entries(attrs || {}).forEach(([k, v]) => {
+      if (!fixedKeys.has(k)) out[k] = v;
+    });
+    return out;
+  }
+
+  // One required field per fixed-attribute definition (see the
+  // ensureFixedAttributes block above) - a <select> when `options` is set,
+  // otherwise a plain required text input. `data-fixed-key` (not `id`, since
+  // attribute names are arbitrary user text and not guaranteed to be valid
+  // id characters) is how saveEventForm() reads these back.
+  function fixedAttributeFieldsHtml(editing) {
+    if (!fixedAttrsCache.length) return "";
+    return fixedAttrsCache
+      .map((fa) => {
+        const value = editing && editing.attributes ? editing.attributes[fa.key] || "" : "";
+        if (fa.options && fa.options.length) {
+          return css`
+            <label>${escapeAttr(fa.key)} *</label>
+            <select data-fixed-key="${escapeAttr(fa.key)}">
+              <option value="" ${value ? "" : "selected"} disabled>${t("fixed_attr_choose")}</option>
+              ${fa.options
+                .map((o) => `<option value="${escapeAttr(o)}" ${o === value ? "selected" : ""}>${escapeAttr(o)}</option>`)
+                .join("")}
+            </select>
+          `;
+        }
+        return css`
+          <label>${escapeAttr(fa.key)} *</label>
+          <input data-fixed-key="${escapeAttr(fa.key)}" value="${escapeAttr(value)}" />
+        `;
+      })
+      .join("");
+  }
+
   // Shared add/edit form body - used by the Manage card's popup and, when
   // "Bewerken" is clicked, by the Upcoming/Month cards' details popup too.
   // `editing` is null when adding a new event.
@@ -610,8 +703,9 @@
             `;
           })()}
         </div>
+        ${fixedAttributeFieldsHtml(editing)}
         <label>${t("field_custom_attrs")}</label>
-        <div id="f-attrs-rows">${attrRowsHtml(editing ? editing.attributes : {})}</div>
+        <div id="f-attrs-rows">${attrRowsHtml(freeformAttributesOf(editing ? editing.attributes : {}))}</div>
         <button type="button" class="bd-btn secondary" data-action="add-attr">${t("action_add_attr")}</button>
         ${
           editing && confirmDelete
@@ -659,6 +753,19 @@
       return { ok: false, message: t("validation_required") };
     }
 
+    const fixedFieldValues = {};
+    root.querySelectorAll("[data-fixed-key]").forEach((field) => {
+      fixedFieldValues[field.dataset.fixedKey] = field.value.trim();
+    });
+    const fixedValues = {};
+    for (const fa of fixedAttrsCache) {
+      const value = fixedFieldValues[fa.key] || "";
+      if (!value) {
+        return { ok: false, message: t("validation_required_fixed", { key: fa.key }) };
+      }
+      fixedValues[fa.key] = value;
+    }
+
     const data = { name, event_type: eventType, date: dateVal };
     if (icon) data.icon = icon;
     if (eventType === "deceased" && dateOfDeath) data.date_of_death = dateOfDeath;
@@ -671,7 +778,7 @@
     // Always included (even {}), so removing every row actually clears
     // previously stored attributes - update_event replaces this field
     // wholesale rather than merging it key by key (see manager.py).
-    const attributes = {};
+    const attributes = { ...fixedValues };
     root.querySelectorAll("#f-attrs-rows .bd-attr-row").forEach((row) => {
       const key = row.querySelector(".f-attr-key").value.trim();
       const value = row.querySelector(".f-attr-value").value.trim();
@@ -824,6 +931,19 @@
       .le-editor-field input:focus, .le-editor-field select:focus { outline: none; border-color: var(--primary-color); }
       .le-editor-label { font-size: 12px; color: var(--secondary-text-color); margin-bottom: -8px; }
       .le-editor-types { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+      .le-hint { font-size: 12px; color: var(--secondary-text-color); margin-top: -8px; }
+      .le-fixed-attr-row { display: flex; gap: 8px; align-items: center; }
+      .le-fixed-attr-row input, .le-fixed-attr-row select {
+        font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 6px;
+        border: 1px solid var(--divider-color); background: var(--card-background-color);
+        color: var(--primary-text-color);
+      }
+      .le-fixed-attr-row .fa-key { flex: 1; min-width: 0; }
+      .le-fixed-attr-row .fa-kind { flex: 0 0 auto; }
+      .le-fixed-attr-row .fa-options { flex: 1.5; min-width: 0; }
+      .le-icon-btn { cursor: pointer; background: none; border: none; color: var(--secondary-text-color); font-size: 18px; padding: 4px; flex: 0 0 auto; }
+      button.le-btn { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; background: var(--primary-color); color: var(--text-primary-color, #fff); font: inherit; align-self: flex-start; }
+      button.le-btn.secondary { background: var(--secondary-background-color); color: var(--primary-text-color); }
     </style>
   `;
 
@@ -867,6 +987,83 @@
     `;
   }
 
+  // ---------------------------------------------------------------------
+  // Fixed-attribute schema editor - only used by LifeEventsManageCardEditor.
+  // Writes straight to the backend via the set_fixed_attributes service
+  // rather than through this._update()/config-changed like the rest of the
+  // editor: this isn't part of THIS card's own config, it's an install-wide
+  // setting shared by every card's edit form (see the ensureFixedAttributes
+  // block near the top of this file), so it doesn't belong in Lovelace's
+  // per-card config at all.
+  // ---------------------------------------------------------------------
+  function fixedAttrsEditorRowsHtml(list) {
+    return list
+      .map(
+        (fa) => css`
+          <div class="le-fixed-attr-row" data-fixed-attr-row>
+            <input class="fa-key" placeholder="${escapeAttr(t("fixed_attr_key_placeholder"))}" value="${escapeAttr(fa.key || "")}" />
+            <select class="fa-kind">
+              <option value="text" ${!fa.options ? "selected" : ""}>${t("fixed_attr_kind_text")}</option>
+              <option value="dropdown" ${fa.options ? "selected" : ""}>${t("fixed_attr_kind_dropdown")}</option>
+            </select>
+            <input class="fa-options" placeholder="${escapeAttr(t("fixed_attr_options_placeholder"))}" value="${escapeAttr((fa.options || []).join(", "))}" style="${fa.options ? "" : "display:none;"}" />
+            <button type="button" class="le-icon-btn" data-action="remove-fixed-attr">✕</button>
+          </div>
+        `
+      )
+      .join("");
+  }
+
+  function bindFixedAttrsRow(row) {
+    const kindSelect = row.querySelector(".fa-kind");
+    const optionsInput = row.querySelector(".fa-options");
+    kindSelect.addEventListener("change", () => {
+      optionsInput.style.display = kindSelect.value === "dropdown" ? "" : "none";
+    });
+    row.querySelector('[data-action="remove-fixed-attr"]').addEventListener("click", () => row.remove());
+  }
+
+  function bindFixedAttrsSection(root, hass) {
+    const container = root.querySelector("#fixed-attrs-rows");
+    if (!container) return;
+    container.querySelectorAll("[data-fixed-attr-row]").forEach(bindFixedAttrsRow);
+
+    const addBtn = root.querySelector('[data-action="add-fixed-attr"]');
+    if (addBtn)
+      addBtn.addEventListener("click", () => {
+        container.insertAdjacentHTML("beforeend", fixedAttrsEditorRowsHtml([{ key: "", options: null }]));
+        bindFixedAttrsRow(container.lastElementChild);
+      });
+
+    const saveBtn = root.querySelector('[data-action="save-fixed-attrs"]');
+    const statusEl = root.querySelector("#fixed-attrs-status");
+    if (saveBtn)
+      saveBtn.addEventListener("click", async () => {
+        const list = [];
+        container.querySelectorAll("[data-fixed-attr-row]").forEach((row) => {
+          const key = row.querySelector(".fa-key").value.trim();
+          if (!key) return;
+          const kind = row.querySelector(".fa-kind").value;
+          const fa = { key };
+          if (kind === "dropdown") {
+            fa.options = row
+              .querySelector(".fa-options")
+              .value.split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+          }
+          list.push(fa);
+        });
+        await callService(hass, "set_fixed_attributes", { fixed_attributes: list });
+        // Updates the shared module-level cache directly so this tab's card
+        // edit forms reflect the change immediately, without waiting for
+        // a fresh get_fixed_attributes round trip.
+        fixedAttrsCache = list;
+        fixedAttrsLoaded = true;
+        if (statusEl) statusEl.textContent = t("status_saved");
+      });
+  }
+
   function bindEventTypeCheckboxes(root, onChange) {
     const boxes = Array.from(root.querySelectorAll("ha-checkbox[data-type]"));
     boxes.forEach((cb) =>
@@ -900,6 +1097,7 @@
       // every subsequent tick - so this doesn't fight with the render
       // suppression below or wipe in-progress typing.
       ensureTranslations(hass, () => this._render());
+      ensureFixedAttributes(hass, () => this._render());
       // Skip re-rendering while a modal is open (add/edit form, import
       // panel, details popup, ...): hass updates fire on *any* entity's
       // state change anywhere in HA, and a full re-render would wipe out
@@ -1158,6 +1356,7 @@
       // loading - not on every tick - so it's safe even though the editor
       // has no other re-render protection (see ensureTranslations()).
       ensureTranslations(hass, () => this._render());
+      ensureFixedAttributes(hass, () => this._render());
     }
     _render() {
       if (!this._config) return;
@@ -1374,6 +1573,7 @@
     set hass(hass) {
       this._hass = hass;
       ensureTranslations(hass, () => this._render());
+      ensureFixedAttributes(hass, () => this._render());
     }
     _render() {
       if (!this._config) return;
@@ -1442,6 +1642,7 @@
       const firstRender = !this._hass;
       this._hass = hass;
       ensureTranslations(hass, () => this._render());
+      ensureFixedAttributes(hass, () => this._render());
       if (firstRender) {
         this._render();
       } else if (!this._suppressRender) {
@@ -1857,6 +2058,7 @@
     set hass(hass) {
       this._hass = hass;
       ensureTranslations(hass, () => this._render());
+      ensureFixedAttributes(hass, () => this._render());
     }
     _render() {
       if (!this._config) return;
@@ -1878,12 +2080,19 @@
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
           ${renderEventTypeCheckboxes(this._config.event_types)}
+          <div class="le-editor-label">${t("fixed_attrs_section_title")}</div>
+          <div class="le-hint">${t("fixed_attrs_section_hint")}</div>
+          <div id="fixed-attrs-rows">${fixedAttrsEditorRowsHtml(fixedAttrsCache)}</div>
+          <button type="button" class="le-btn secondary" data-action="add-fixed-attr">${t("action_add_fixed_attr")}</button>
+          <button type="button" class="le-btn" data-action="save-fixed-attrs">${t("action_save_fixed_attrs")}</button>
+          <div id="fixed-attrs-status" class="le-hint"></div>
         </div>
       `;
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
       this.querySelector("#display_mode").addEventListener("change", (e) => this._update({ display_mode: e.target.value }));
       this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
+      bindFixedAttrsSection(this, this._hass);
     }
     _update(patch) {
       this._config = { ...this._config, ...patch };

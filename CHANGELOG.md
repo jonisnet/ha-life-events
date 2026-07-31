@@ -3,6 +3,30 @@
 All notable changes to Life Events are documented here. Only Beta releases
 are cut until noted otherwise.
 
+## 0.0.2-beta.12 — unreleased
+
+### Added
+- **Fixed (required) custom attributes**, configurable per install via the
+  Manage card's visual editor - e.g. a required `geslacht` field restricted
+  to `man`/`vrouw`/`anders`. Define a name, choose free text or a dropdown
+  (comma-separated options), and save; it then appears as a required field
+  on every card's add/edit form (not just the Manage card), pre-filled from
+  the event's existing attribute when editing, and excluded from the
+  freeform "Aangepaste attributen" rows so it doesn't show up twice.
+  Enforced server-side too (`add_event`/`update_event` reject the call if a
+  required attribute is missing), so this also protects automations/scripts
+  that bypass the cards entirely, not just the UI. Not hardcoded into the
+  integration - opt-in per install, off by default.
+- Backend: new `set_fixed_attributes`/`get_fixed_attributes` services and a
+  small persistent store (`fixed_attributes.py`) for the schema.
+
+Verified with a new 10-check runtime test covering the editor (define a
+dropdown attribute, save), all three cards picking it up, pre-fill,
+duplicate-prevention, and both the pass/fail validation paths - plus a new
+backend test suite (`tests/test_fixed_attributes.py`) covering the
+set/get roundtrip and server-side enforcement on add/update - plus the full
+existing regression suite (98 checks, all still passing).
+
 ## 0.0.2-beta.11
 
 ### Added

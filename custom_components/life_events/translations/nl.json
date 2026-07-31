@@ -30,6 +30,14 @@
     "export_events": {
       "name": "Gebeurtenissen exporteren",
       "description": "Exporteer alle gebeurtenissen als CSV- of JSON-tekst."
+    },
+    "set_fixed_attributes": {
+      "name": "Vaste attributen instellen",
+      "description": "Vervang het schema van vaste (verplichte) aangepaste attributen. Normaal ingesteld via de editor van de Beheren-kaart, niet rechtstreeks aanroepen."
+    },
+    "get_fixed_attributes": {
+      "name": "Vaste attributen opvragen",
+      "description": "Geef het huidige schema van vaste (verplichte) aangepaste attributen terug."
     }
   }
 }

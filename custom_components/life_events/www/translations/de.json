@@ -73,5 +73,15 @@
   "io_file_error": "'{file}' konnte nicht gelesen werden.",
   "io_export_done": "Export abgeschlossen.",
   "io_import_nothing": "Nichts zu importieren.",
-  "io_import_done": "Importiert: {count} Ereignisse."
+  "io_import_done": "Importiert: {count} Ereignisse.",
+  "fixed_attr_choose": "-- wählen --",
+  "validation_required_fixed": "{key} ist erforderlich.",
+  "fixed_attrs_section_title": "Feste (erforderliche) Attribute",
+  "fixed_attrs_section_hint": "Diese gelten für die gesamte Installation und erscheinen als Pflichtfeld auf jedem Bearbeitungsformular.",
+  "fixed_attr_key_placeholder": "Name (z. B. Geschlecht)",
+  "fixed_attr_kind_text": "Freitext",
+  "fixed_attr_kind_dropdown": "Dropdown",
+  "fixed_attr_options_placeholder": "Optionen, kommagetrennt (z. B. Mann, Frau, Divers)",
+  "action_add_fixed_attr": "+ Festes Attribut hinzufügen",
+  "action_save_fixed_attrs": "Feste Attribute speichern"
 }

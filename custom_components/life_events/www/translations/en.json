@@ -73,5 +73,15 @@
   "io_file_error": "Could not read '{file}'.",
   "io_export_done": "Export done.",
   "io_import_nothing": "Nothing to import.",
-  "io_import_done": "Imported: {count} events."
+  "io_import_done": "Imported: {count} events.",
+  "fixed_attr_choose": "-- choose --",
+  "validation_required_fixed": "{key} is required.",
+  "fixed_attrs_section_title": "Fixed (required) attributes",
+  "fixed_attrs_section_hint": "These apply install-wide and appear as required fields on every edit form.",
+  "fixed_attr_key_placeholder": "Name (e.g. gender)",
+  "fixed_attr_kind_text": "Free text",
+  "fixed_attr_kind_dropdown": "Dropdown",
+  "fixed_attr_options_placeholder": "Options, comma-separated (e.g. Man, Woman, Other)",
+  "action_add_fixed_attr": "+ Add fixed attribute",
+  "action_save_fixed_attrs": "Save fixed attributes"
 }

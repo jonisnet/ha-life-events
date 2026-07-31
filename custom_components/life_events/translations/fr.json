@@ -30,6 +30,14 @@
     "export_events": {
       "name": "Exporter des événements",
       "description": "Exporter tous les événements au format CSV ou JSON."
+    },
+    "set_fixed_attributes": {
+      "name": "Définir les attributs fixes",
+      "description": "Remplacer le schéma des attributs personnalisés fixes (obligatoires). Normalement défini via l'éditeur de la carte Gérer, à ne pas appeler directement."
+    },
+    "get_fixed_attributes": {
+      "name": "Obtenir les attributs fixes",
+      "description": "Retourner le schéma actuel des attributs personnalisés fixes (obligatoires)."
     }
   }
 }

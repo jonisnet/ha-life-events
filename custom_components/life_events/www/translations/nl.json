@@ -73,5 +73,15 @@
   "io_file_error": "Kon '{file}' niet lezen.",
   "io_export_done": "Export klaar.",
   "io_import_nothing": "Niets om te importeren.",
-  "io_import_done": "Geïmporteerd: {count} gebeurtenissen."
+  "io_import_done": "Geïmporteerd: {count} gebeurtenissen.",
+  "fixed_attr_choose": "-- kies --",
+  "validation_required_fixed": "{key} is verplicht.",
+  "fixed_attrs_section_title": "Vaste (verplichte) attributen",
+  "fixed_attrs_section_hint": "Deze gelden voor de hele installatie en verschijnen verplicht op elk bewerkformulier.",
+  "fixed_attr_key_placeholder": "Naam (bv. geslacht)",
+  "fixed_attr_kind_text": "Vrije tekst",
+  "fixed_attr_kind_dropdown": "Keuzelijst",
+  "fixed_attr_options_placeholder": "Opties, komma-gescheiden (bv. Man, Vrouw, Anders)",
+  "action_add_fixed_attr": "+ Vast attribuut toevoegen",
+  "action_save_fixed_attrs": "Vaste attributen opslaan"
 }

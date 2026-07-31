@@ -147,3 +147,20 @@ export_events:
           options:
             - csv
             - json
+
+set_fixed_attributes:
+  name: Set fixed attributes
+  description: >-
+    Replace the schema of fixed (required) custom attributes, e.g. a
+    required "geslacht" dropdown with Man/Vrouw/Anders. Normally set via the
+    Manage card's editor, not called directly.
+  fields:
+    fixed_attributes:
+      required: true
+      description: List of {key, options} objects. Omit options for a required free-text field.
+      selector:
+        object:
+
+get_fixed_attributes:
+  name: Get fixed attributes
+  description: Return the current schema of fixed (required) custom attributes.

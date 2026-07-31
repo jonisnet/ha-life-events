@@ -87,6 +87,18 @@ dashboards written against the original integration keep working unmodified.
 | `time` | no | Time of day (e.g. a birth time), purely informational - not used in any calculation. Rarely known for existing entries, but often printed on a birth announcement card for a newborn. |
 | `attributes` | no | Freeform key/value pairs you define yourself (e.g. `relatie`, `geslacht`), exposed as extra entity attributes. Editable directly in the **Life Events: Manage** card's add/edit popup — add or remove as many as you like, no fixed schema. |
 
+### Fixed (required) attributes
+
+Some attributes should always be filled in, for everyone — e.g. a `geslacht`
+field with fixed options `man`/`vrouw`/`anders`. Define these once, for the
+whole install, in the **Life Events: Manage** card's visual editor: give it
+a name, choose free text or a dropdown (comma-separated options), and save.
+It then shows up as a required field on **every** card's add/edit form (not
+just the Manage card), and `add_event`/`update_event` reject the call
+server-side if it's missing — so this is enforced for automations/scripts
+too, not just the cards. Not hardcoded into the integration, so it's opt-in
+per install.
+
 ## Services
 
 - `life_events.add_event`
@@ -94,6 +106,8 @@ dashboards written against the original integration keep working unmodified.
 - `life_events.delete_event`
 - `life_events.import_events` (`format: csv|json`, `mode: merge|replace`)
 - `life_events.export_events` (`format: csv|json`, returns the content)
+- `life_events.set_fixed_attributes` / `life_events.get_fixed_attributes` —
+  normally only called by the Manage card's editor, not directly.
 
 These are what the bundled cards call under the hood — you can also use them
 directly in automations/scripts.

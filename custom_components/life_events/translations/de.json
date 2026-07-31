@@ -30,6 +30,14 @@
     "export_events": {
       "name": "Ereignisse exportieren",
       "description": "Alle Ereignisse als CSV- oder JSON-Zeichenfolge exportieren."
+    },
+    "set_fixed_attributes": {
+      "name": "Feste Attribute festlegen",
+      "description": "Das Schema der festen (erforderlichen) benutzerdefinierten Attribute ersetzen. Normalerweise über den Editor der Verwalten-Karte eingestellt, nicht direkt aufrufen."
+    },
+    "get_fixed_attributes": {
+      "name": "Feste Attribute abrufen",
+      "description": "Das aktuelle Schema der festen (erforderlichen) benutzerdefinierten Attribute zurückgeben."
     }
   }
 }

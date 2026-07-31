@@ -5,6 +5,7 @@ import logging
 from datetime import date, timedelta
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
@@ -15,6 +16,7 @@ from .const import (
     CONF_DATE,
     CONF_DATE_OF_DEATH,
     CONF_EVENT_TYPE,
+    CONF_FIXED_ATTR_KEY,
     CONF_ICON,
     CONF_NAME,
     EVENT_TYPE_ANNIVERSARY,
@@ -22,6 +24,7 @@ from .const import (
     SIGNAL_EVENTS_UPDATED,
 )
 from .entity import EventEntity
+from .fixed_attributes import FixedAttributesStore
 from .models import Event, new_event_id
 from .store import LifeEventsStore, export_events, parse_events
 
@@ -35,7 +38,9 @@ class LifeEventsManager:
         self.hass = hass
         self.entry_id = entry_id
         self.store = LifeEventsStore(hass, entry_id)
+        self.fixed_attributes_store = FixedAttributesStore(hass, entry_id)
         self.events: dict[str, Event] = {}
+        self.fixed_attributes: list[dict] = []
         # Set by the life_events platform's async_setup_entry (see
         # life_events.py) once HA hands us a config-entry-scoped
         # async_add_entities callback - only then can entities actually be
@@ -61,6 +66,7 @@ class LifeEventsManager:
             await self.store.async_save(events)
 
         self.events = {e.id: e for e in events}
+        self.fixed_attributes = await self.fixed_attributes_store.async_load()
 
     async def async_setup_entities(self, async_add_entities: AddEntitiesCallback) -> None:
         """Called by the life_events platform once it has a real, config-entry-bound callback."""
@@ -109,9 +115,33 @@ class LifeEventsManager:
                     },
                 )
 
+    # -- Fixed attributes -------------------------------------------------
+
+    async def async_set_fixed_attributes(self, fixed_attributes: list[dict]) -> None:
+        self.fixed_attributes = fixed_attributes
+        await self.fixed_attributes_store.async_save(fixed_attributes)
+        async_dispatcher_send(self.hass, self.signal)
+
+    def _check_required_attributes(self, attributes: dict) -> None:
+        """Every configured fixed attribute must be present and non-blank.
+
+        Defense in depth: the cards already validate this client-side before
+        calling add_event/update_event, but a direct service call or
+        automation could otherwise silently create/update an event missing
+        a field the user explicitly marked as required.
+        """
+        missing = [
+            fa[CONF_FIXED_ATTR_KEY]
+            for fa in self.fixed_attributes
+            if not str(attributes.get(fa[CONF_FIXED_ATTR_KEY], "") or "").strip()
+        ]
+        if missing:
+            raise ServiceValidationError(f"Missing required attribute(s): {', '.join(missing)}")
+
     # -- CRUD -----------------------------------------------------------------
 
     async def async_add_event(self, **fields) -> Event:
+        self._check_required_attributes(fields.get("attributes") or {})
         event = Event.create(**fields)
         self.events[event.id] = event
         await self.store.async_save(list(self.events.values()))
@@ -136,6 +166,7 @@ class LifeEventsManager:
             "time": fields.get("time", current.time),
             "attributes": fields.get("attributes", current.attributes),
         }
+        self._check_required_attributes(merged["attributes"])
         updated = Event.create(**merged)
         self.events[event_id] = updated
         await self.store.async_save(list(self.events.values()))

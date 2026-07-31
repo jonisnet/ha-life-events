@@ -14,6 +14,7 @@ PLATFORMS: list[str] = []  # calendar is forwarded manually, entities live direc
 
 STORAGE_VERSION = 1
 STORAGE_KEY = f"{DOMAIN}_events"
+STORAGE_KEY_FIXED_ATTRIBUTES = f"{DOMAIN}_fixed_attributes"
 
 # Event fields
 CONF_ID = "id"
@@ -66,6 +67,17 @@ SERVICE_UPDATE_EVENT = "update_event"
 SERVICE_DELETE_EVENT = "delete_event"
 SERVICE_IMPORT_EVENTS = "import_events"
 SERVICE_EXPORT_EVENTS = "export_events"
+SERVICE_SET_FIXED_ATTRIBUTES = "set_fixed_attributes"
+SERVICE_GET_FIXED_ATTRIBUTES = "get_fixed_attributes"
+
+# A fixed-attribute definition: {"key": str, "options": list[str] | None}.
+# `options` absent/None means a required free-text field; present means a
+# required dropdown restricted to those values. Per-installation, not
+# hardcoded into the integration - configured via the Manage card's editor
+# and persisted via FixedAttributesStore (see fixed_attributes.py).
+CONF_FIXED_ATTRIBUTES = "fixed_attributes"
+CONF_FIXED_ATTR_KEY = "key"
+CONF_FIXED_ATTR_OPTIONS = "options"
 
 ATTR_FORMAT = "format"
 ATTR_CONTENT = "content"
