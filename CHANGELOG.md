@@ -4,6 +4,36 @@ All notable changes to Life Events are documented here. Development happens
 in beta releases (`0.0.x-beta.N`) between occasional real releases, where
 this file is consolidated into one summary per real version.
 
+## 0.0.4-beta.1
+
+### Fixed
+- **Entity deletion left orphaned registry entries**: deleting an event (or
+  replacing it during an import) only cleared its state, not its entity
+  registry entry, leaving HA's "this entity is no longer provided" warning
+  behind. Now uses the entity registry's own removal path, which also
+  cleans up the state as a side effect.
+- **Spouse-select dropdown was unsorted**: the marriage-linking picker now
+  lists candidates alphabetically, and both it and the phone country picker
+  are now a searchable combobox (type to filter) instead of a plain
+  dropdown/`<select>`.
+- **Marriage attributes leaked untranslated into the custom-attributes
+  list**: `spouse_naam`-style raw attribute names no longer show up as
+  generic rows; a married person's details popup now shows one friendly,
+  translated "Getrouwd met ... sinds ..." line instead. The same fix also
+  covers two previously-leaking deceased-related attributes
+  (`years_since_death`, `days_until_death_anniversary`).
+- **Phone country field overflowed the popup**: the country selector is
+  now a narrow, fixed-width searchable combobox showing just the dial code
+  (e.g. `+31`) once chosen, so the phone number field next to it no longer
+  gets pushed outside the popup.
+
+### Added
+- **Composable date-format picker**: the old 3 fixed presets (short/medium/
+  long) are replaced with 4 independent controls - weekday on/off, month as
+  digits or name, day-first or month-first order, year on/off - covering
+  the full spectrum from `dd-mm-yyyy` to `dddd dd mmmm yyyy` and everything
+  in between. Existing configs keep working unchanged.
+
 ## 0.0.3
 
 Second real (non-prerelease) release. No real `0.0.2` was ever cut -

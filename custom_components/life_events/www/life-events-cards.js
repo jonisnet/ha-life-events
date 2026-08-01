@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.3 loaded");
+  console.info("Life Events cards: v0.0.4-beta.1 loaded");
 
   const DOMAIN = "life_events";
 
@@ -92,6 +92,7 @@
     field_icon: "Icoon (optioneel, bv. mdi:cake)",
     field_phone: "Telefoonnummer (optioneel, alleen zinvol bij 'Verjaardag'/'Jubileum')",
     phone_placeholder: "0612345678",
+    phone_country_search_placeholder: "Zoek land...",
     field_custom_attrs: "Aangepaste attributen (optioneel, bv. relatie, geslacht - zelf te bepalen)",
     action_add_attr: "+ Attribuut toevoegen",
     confirm_delete_question: "Deze gebeurtenis verwijderen?",
@@ -154,15 +155,21 @@
     deceased_years_ago_short: "{years} jaar geleden",
     backfill_pill_label: "{key}: {count} ontbrekend",
     editor_date_format: "Datumnotatie",
-    date_format_short: "dd-mm-jjjj",
-    date_format_medium: "dd maand jjjj",
-    date_format_long: "weekdag dd maand",
+    date_format_show_weekday: "Toon weekdag",
+    date_format_month_label: "Maandnotatie",
+    date_format_month_numeric: "Cijfers (05)",
+    date_format_month_name: "Naam (mei)",
+    date_format_order_label: "Volgorde",
+    date_format_order_dm: "Dag eerst",
+    date_format_order_md: "Maand eerst",
+    date_format_show_year: "Toon jaartal",
     action_edit_yaml: "Bewerk als YAML",
     action_edit_form: "Terug naar formulier",
     yaml_edit_hint: "Technische veldnamen (Engels), niet vertaald - net als YAML-bewerken elders in Home Assistant.",
     validation_invalid_fixed_option: "{key} moet een van de toegestane waarden zijn.",
     marriage_section_title: "Huwelijk",
     label_married_to: "Getrouwd met {name} sinds {date}",
+    marriage_partner_since: "{name} (sinds {date})",
     action_divorce: "Scheiden",
     marriage_pick_spouse_label: "Kies partner...",
     marriage_new_person_option: "+ Nieuw persoon aanmaken",
@@ -241,6 +248,10 @@
 
   function weekdayName(date) {
     return new Intl.DateTimeFormat(currentLangCode, { weekday: "long" }).format(date);
+  }
+
+  function monthName(date) {
+    return new Intl.DateTimeFormat(currentLangCode, { month: "long" }).format(date);
   }
 
   // Looks up `key` in the current language, falling back to Dutch (always
@@ -400,6 +411,15 @@
 
   const COUNTRY_BY_ISO = Object.fromEntries(COUNTRY_CODES.map((c) => [c[0], c]));
 
+  // Shared by the phone field's render and bind steps - one source of
+  // truth so they can't drift apart. `label` (full country name, used
+  // while searching the list) vs. `shortLabel` (just the dial code, what
+  // stays visible in the field once picked) is exactly the "options
+  // spelled out, but compact after selection" split that was asked for.
+  function phoneCountryOptions() {
+    return COUNTRY_CODES.map((c) => ({ value: c[0], label: `${c[2]} (+${c[1]})`, shortLabel: `+${c[1]}` }));
+  }
+
   /** Local-format input + a country's dial code -> E.164 (e.g. "0612345678" + NL -> "+31612345678"). */
   function toE164(localNumber, iso2) {
     const country = COUNTRY_BY_ISO[iso2] || COUNTRY_BY_ISO.NL;
@@ -438,6 +458,9 @@
     "friendly_name", "icon", "unit_of_measurement",
     "date_of_birth", "age_at_next_birthday", "event_type",
     "date_of_death", "phone_number", "time",
+    "years_since_death", "days_until_death_anniversary",
+    "spouse_id", "spouse_name", "marriage_date",
+    "days_until_marriage_anniversary", "years_at_next_marriage_anniversary",
   ]);
 
   function customAttributesOf(st) {
@@ -546,23 +569,66 @@
     return out;
   }
 
-  // `format`: "short" (default, dd-mm-yyyy, locale-agnostic - unchanged
-  // behavior for anyone who never touches the new per-card setting),
-  // "medium" (dd MMMM yyyy) or "long" (dddd dd MMMM), both locale-correct
-  // via Intl.DateTimeFormat and currentLangCode - same technique as
-  // weekdayName() above, so this is "per-language" for free.
+  // Normalizes any historical `date_format` config shape into a full
+  // { weekday, month, order, year } object:
+  //   - the legacy preset strings "medium"/"long" (kept working for any
+  //     dashboard that already had one of these set before the composable
+  //     picker below existed - "short"/undefined never reaches here, see
+  //     formatDate()'s own early-return for that case).
+  //   - a partial or full object from the new picker (missing keys default
+  //     to the plain short-format equivalent, so a single-field update -
+  //     see bindDateFormatFields() - never has to know the other three).
+  function normalizeDateFormat(raw) {
+    if (raw === "medium") return { weekday: false, month: "long", order: "dm", year: true };
+    if (raw === "long") return { weekday: true, month: "long", order: "dm", year: false };
+    const obj = raw && typeof raw === "object" ? raw : {};
+    return {
+      weekday: !!obj.weekday,
+      month: obj.month === "long" ? "long" : "numeric",
+      order: obj.order === "md" ? "md" : "dm",
+      year: obj.year !== false,
+    };
+  }
+
+  // `format`: undefined/"short" (default, dd-mm-yyyy, locale-agnostic -
+  // unchanged behavior for anyone who never touches the per-card setting)
+  // or anything normalizeDateFormat() above accepts - a fully composable
+  // weekday/month-style/day-month-order/year picker, covering the whole
+  // spectrum from "dd-mm-yyyy" through "dddd mmmm dd yyyy" (and every
+  // other combination) rather than a fixed handful of presets. Weekday
+  // and month names are locale-correct via Intl.DateTimeFormat and
+  // currentLangCode (see weekdayName()/monthName()), so this is
+  // "per-language" for free; the day/month/year digits and their
+  // separators are composed by hand here instead of relying on Intl's own
+  // whole-date formatting, since Intl has no way to force a token order
+  // that isn't the locale's own default.
   function formatDate(iso, format) {
     if (!iso) return "";
     const [y, m, d] = iso.split("-");
     if (!format || format === "short") return `${d}-${m}-${y}`;
     const date = new Date(Number(y), Number(m) - 1, Number(d));
-    if (format === "medium") {
-      return new Intl.DateTimeFormat(currentLangCode, { day: "numeric", month: "long", year: "numeric" }).format(date);
+    const cfg = normalizeDateFormat(format);
+    const monthIsLong = cfg.month === "long";
+    const monthStr = monthIsLong ? monthName(date) : String(m).padStart(2, "0");
+    // No leading zero on the day when the month is spelled out ("5 mei",
+    // not "05 mei") - matches how that's naturally written, unlike the
+    // zero-padded numeric-month form ("05-05").
+    const dayStr = monthIsLong ? String(Number(d)) : String(d).padStart(2, "0");
+    const monthFirst = cfg.order === "md";
+    let dateStr = monthIsLong
+      ? monthFirst
+        ? `${monthStr} ${dayStr}`
+        : `${dayStr} ${monthStr}`
+      : monthFirst
+        ? `${monthStr}-${dayStr}`
+        : `${dayStr}-${monthStr}`;
+    if (cfg.year) {
+      dateStr = monthIsLong ? `${dateStr} ${y}` : `${dateStr}-${y}`;
     }
-    if (format === "long") {
-      return new Intl.DateTimeFormat(currentLangCode, { weekday: "long", day: "numeric", month: "long" }).format(date);
+    if (cfg.weekday) {
+      dateStr = `${weekdayName(date)} ${dateStr}`;
     }
-    return `${d}-${m}-${y}`;
+    return dateStr;
   }
 
   // Client-side only (the backend only exposes a whole-day count as
@@ -701,6 +767,9 @@
     if (e.eventType !== "deceased" && e.age != null) rows.push([t("label_becomes"), e.age]);
     if (e.eventType === "deceased" && e.dateOfDeath) rows.push([t("label_date_of_death"), formatDate(e.dateOfDeath, dateFormat)]);
     if (e.phoneNumber) rows.push([t("label_phone"), e.phoneNumber]);
+    if (e.spouseId && e.marriageDate) {
+      rows.push([t("marriage_section_title"), t("marriage_partner_since", { name: e.spouseName || e.spouseId, date: formatDate(e.marriageDate, dateFormat) })]);
+    }
     Object.entries(e.attributes || {}).forEach(([k, v]) => rows.push([k, v]));
     const rowsHtml = rows
       .map(
@@ -800,6 +869,107 @@
       .join("");
   }
 
+  // Generic "searchable select": a text input for typing/searching plus a
+  // hidden input holding the actual selected value, backed by a plain
+  // `[{value, label}]` array filtered by substring match as you type.
+  // Shared by the spouse picker and the phone country picker - deliberately
+  // NOT a native <select>/<datalist> (both have real cross-browser quirks
+  // for "hide/rename the selected option's own display text" and/or
+  // in-list text search), in favor of one small, predictable
+  // implementation used both places.
+  // `option.shortLabel`, if given, is what's written into the search box
+  // once selected (e.g. just "+31") instead of the full `label` shown
+  // while searching the list (e.g. "Nederland (+31)") - used by the phone
+  // country picker to stay compact after a choice is made; omit it (as
+  // the spouse picker does) to just show `label` both places.
+  // `wrapperStyle`, if given, is applied to the outer `.le-combobox` div
+  // (e.g. to size the phone country picker narrower than a full-width
+  // field).
+  function renderSearchableSelect(idPrefix, options, selectedValue, placeholder, wrapperStyle) {
+    const selected = options.find((o) => o.value === selectedValue);
+    const displayValue = selected ? (selected.shortLabel != null ? selected.shortLabel : selected.label) : "";
+    return css`
+      <div class="le-combobox" style="${wrapperStyle || ""}">
+        <input type="text" id="${idPrefix}-search" class="le-combobox-input" autocomplete="off" placeholder="${escapeAttr(placeholder)}" value="${escapeAttr(displayValue)}" />
+        <input type="hidden" id="${idPrefix}-value" value="${escapeAttr(selectedValue || "")}" />
+        <div class="le-combobox-list" id="${idPrefix}-list"></div>
+      </div>
+    `;
+  }
+
+  // `extraOption` (optional {value, label}): always shown pinned at the top
+  // of the list regardless of the current filter text - used for the
+  // spouse picker's "+ Nieuw persoon aanmaken" entry, which must stay
+  // reachable even when nothing in the real candidate list matches what's
+  // been typed so far.
+  function bindSearchableSelect(root, idPrefix, options, onChange, extraOption) {
+    const searchInput = root.querySelector(`#${idPrefix}-search`);
+    const valueInput = root.querySelector(`#${idPrefix}-value`);
+    const listEl = root.querySelector(`#${idPrefix}-list`);
+    if (!searchInput || !valueInput || !listEl) return;
+    const allForLookup = extraOption ? [extraOption, ...options] : options;
+
+    const renderList = (filterText) => {
+      const q = (filterText || "").trim().toLowerCase();
+      const matches = (q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options).slice(0, 50);
+      const extraHtml = extraOption
+        ? `<div class="le-combobox-option le-combobox-option-pinned" data-value="${escapeAttr(extraOption.value)}">${escapeAttr(extraOption.label)}</div>`
+        : "";
+      const matchesHtml = matches
+        .map((o) => `<div class="le-combobox-option" data-value="${escapeAttr(o.value)}">${escapeAttr(o.label)}</div>`)
+        .join("");
+      listEl.innerHTML = extraHtml + matchesHtml;
+      listEl.style.display = matches.length || extraOption ? "" : "none";
+    };
+
+    const selectOption = (value) => {
+      const match = allForLookup.find((o) => o.value === value);
+      valueInput.value = value;
+      searchInput.value = match ? (match.shortLabel != null ? match.shortLabel : match.label) : "";
+      listEl.style.display = "none";
+      if (onChange) onChange(value);
+    };
+
+    searchInput.addEventListener("focus", () => renderList(""));
+    searchInput.addEventListener("input", () => renderList(searchInput.value));
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        listEl.style.display = "none";
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const first = listEl.querySelector(".le-combobox-option");
+        if (first) selectOption(first.dataset.value);
+      }
+    });
+    // mousedown (not click): fires before the text input's own blur, so a
+    // list item can still be selected even though clicking it would
+    // otherwise blur the field and hide the list first.
+    listEl.addEventListener("mousedown", (e) => {
+      const opt = e.target.closest(".le-combobox-option");
+      if (!opt) return;
+      e.preventDefault();
+      selectOption(opt.dataset.value);
+    });
+    searchInput.addEventListener("blur", () => {
+      setTimeout(() => {
+        listEl.style.display = "none";
+      }, 150);
+    });
+  }
+
+  // Shared by renderMarriageSection() (initial render) and
+  // bindMarriageSection() (rebuilding the same list to bind against) -
+  // one source of truth so they can't drift apart. Alphabetical, not
+  // hass.states' arbitrary insertion order (which is what made this look
+  // "random" before) - localeCompare so accented names (e.g. "Åke",
+  // "Émile") sort sensibly too.
+  function unmarriedBirthdayCandidates(hass, editingId) {
+    return getEvents(hass, ["birthday"])
+      .filter((c) => c.entity_id.split(".")[1] !== editingId && !c.spouseId)
+      .map((c) => ({ value: c.entity_id.split(".")[1], label: c.name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
   // Shared add/edit form body - used by the Manage card's popup and, when
   // "Bewerken" is clicked, by the Upcoming/Month cards' details popup too.
   // `editing` is null when adding a new event.
@@ -822,16 +992,10 @@
       `;
     }
     if (editing.eventType !== "birthday") return "";
-    const candidates = getEvents(hass, ["birthday"]).filter(
-      (c) => c.entity_id.split(".")[1] !== editingId && !c.spouseId
-    );
+    const candidateOptions = unmarriedBirthdayCandidates(hass, editingId);
     return css`
       <label>${t("marriage_section_title")}</label>
-      <select id="f-spouse-select">
-        <option value="">${t("marriage_pick_spouse_label")}</option>
-        ${candidates.map((c) => `<option value="${escapeAttr(c.entity_id.split(".")[1])}">${escapeAttr(c.name)}</option>`).join("")}
-        <option value="__new__">${t("marriage_new_person_option")}</option>
-      </select>
+      ${renderSearchableSelect("f-spouse", candidateOptions, "", t("marriage_pick_spouse_label"))}
       <div id="f-new-spouse-fields" style="display:none;">
         <label>${t("new_spouse_firstname_label")}</label>
         <input id="f-new-spouse-firstname" />
@@ -877,13 +1041,8 @@
           ${(() => {
             const phone = fromE164(editing ? editing.phoneNumber : "");
             return css`
-              <select id="f-phone-country" style="flex:0 0 auto; width:auto;">
-                ${COUNTRY_CODES.map(
-                  (c) =>
-                    `<option value="${c[0]}" ${c[0] === phone.iso2 ? "selected" : ""}>${c[2]} (+${c[1]})</option>`
-                ).join("")}
-              </select>
-              <input id="f-phone-local" style="flex:1;" placeholder="${escapeAttr(t("phone_placeholder"))}" value="${phone.local}" />
+              ${renderSearchableSelect("f-phone-country", phoneCountryOptions(), phone.iso2, t("phone_country_search_placeholder"), "flex:0 0 100px; width:100px;")}
+              <input id="f-phone-local" style="flex:1; min-width:0;" placeholder="${escapeAttr(t("phone_placeholder"))}" value="${phone.local}" />
             `;
           })()}
         </div>
@@ -1032,7 +1191,7 @@
     const time = root.querySelector("#f-time").value;
     const dateOfDeath = root.querySelector("#f-date-death").value;
     const icon = root.querySelector("#f-icon").value.trim();
-    const phoneCountry = root.querySelector("#f-phone-country").value;
+    const phoneCountry = root.querySelector("#f-phone-country-value").value;
     const phoneLocal = root.querySelector("#f-phone-local").value.trim();
     // Only meaningful for birthday/anniversary; clears any previously set
     // number if the type was switched to deceased or the field was emptied.
@@ -1195,18 +1354,25 @@
       });
 
     bindMarriageSection(root, ctx);
+    bindSearchableSelect(root, "f-phone-country", phoneCountryOptions(), null);
   }
 
   // Marry/divorce actions for renderMarriageSection()'s markup - part of
   // bindEventFormEvents (called from there), split out only for
   // readability given how much is already in that function.
   function bindMarriageSection(root, ctx) {
-    const spouseSelect = root.querySelector("#f-spouse-select");
-    if (spouseSelect) {
-      spouseSelect.addEventListener("change", () => {
-        const newFields = root.querySelector("#f-new-spouse-fields");
-        if (newFields) newFields.style.display = spouseSelect.value === "__new__" ? "" : "none";
-      });
+    const spouseValueInput = root.querySelector("#f-spouse-value");
+    if (spouseValueInput) {
+      bindSearchableSelect(
+        root,
+        "f-spouse",
+        unmarriedBirthdayCandidates(ctx.hass, ctx.editingId),
+        (value) => {
+          const newFields = root.querySelector("#f-new-spouse-fields");
+          if (newFields) newFields.style.display = value === "__new__" ? "" : "none";
+        },
+        { value: "__new__", label: t("marriage_new_person_option") }
+      );
     }
 
     const confirmMarriageBtn = root.querySelector('[data-action="confirm-marriage"]');
@@ -1214,7 +1380,7 @@
       confirmMarriageBtn.addEventListener("click", async () => {
         const statusEl = root.querySelector("#marriage-status");
         const marriageDate = root.querySelector("#f-marriage-date").value;
-        let spouseId = spouseSelect.value;
+        let spouseId = spouseValueInput ? spouseValueInput.value : "";
         if (!marriageDate || !spouseId) {
           if (statusEl) statusEl.textContent = t("validation_required");
           return;
@@ -1435,15 +1601,55 @@
     `;
   }
 
-  // Shared by all 3 card editors' date-format picker (see formatDate()) -
-  // a function rather than a module-level const since the labels depend on
-  // the current language, only resolvable once a card actually renders.
-  function dateFormatOptions() {
-    return [
-      ["short", t("date_format_short")],
-      ["medium", t("date_format_medium")],
-      ["long", t("date_format_long")],
-    ];
+  // Shared by all 3 card editors' date-format picker (see formatDate()/
+  // normalizeDateFormat()): 4 small controls composing the full spectrum
+  // from "dd-mm-yyyy" to "dddd mmmm dd yyyy" (and everything between)
+  // instead of a fixed handful of presets.
+  function renderDateFormatFields(config) {
+    const cfg = normalizeDateFormat(config.date_format);
+    return css`
+      <div class="le-editor-label">${t("editor_date_format")}</div>
+      <ha-formfield label="${t("date_format_show_weekday")}">
+        <ha-switch id="date_format_weekday" ${cfg.weekday ? "checked" : ""}></ha-switch>
+      </ha-formfield>
+      ${renderEditorSelect(
+        "date_format_month",
+        t("date_format_month_label"),
+        [
+          ["numeric", t("date_format_month_numeric")],
+          ["long", t("date_format_month_name")],
+        ],
+        cfg.month
+      )}
+      ${renderEditorSelect(
+        "date_format_order",
+        t("date_format_order_label"),
+        [
+          ["dm", t("date_format_order_dm")],
+          ["md", t("date_format_order_md")],
+        ],
+        cfg.order
+      )}
+      <ha-formfield label="${t("date_format_show_year")}">
+        <ha-switch id="date_format_year" ${cfg.year ? "checked" : ""}></ha-switch>
+      </ha-formfield>
+    `;
+  }
+
+  // `updateFn(patch)` - typically `(patch) => this._update(patch)` - is
+  // called with a full, merged `{ date_format: {...} }` patch on any one
+  // field changing, so a single-field edit never has to know (or clobber)
+  // the other three.
+  function bindDateFormatFields(el, config, updateFn) {
+    const cfg = normalizeDateFormat(config.date_format);
+    const weekdayEl = el.querySelector("#date_format_weekday");
+    if (weekdayEl) weekdayEl.addEventListener("change", (e) => updateFn({ date_format: { ...cfg, weekday: e.target.checked } }));
+    const monthEl = el.querySelector("#date_format_month");
+    if (monthEl) monthEl.addEventListener("change", (e) => updateFn({ date_format: { ...cfg, month: e.target.value } }));
+    const orderEl = el.querySelector("#date_format_order");
+    if (orderEl) orderEl.addEventListener("change", (e) => updateFn({ date_format: { ...cfg, order: e.target.value } }));
+    const yearEl = el.querySelector("#date_format_year");
+    if (yearEl) yearEl.addEventListener("change", (e) => updateFn({ date_format: { ...cfg, year: e.target.checked } }));
   }
 
   function renderEventTypeCheckboxes(selectedTypes) {
@@ -1672,6 +1878,12 @@
             .bd-attr-row { display: flex; gap: 8px; margin-bottom: 6px; }
             .bd-attr-row input { flex: 1; min-width: 0; }
             .bd-confirm { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding: 12px; border-radius: 6px; background: var(--secondary-background-color); }
+            .le-combobox { position: relative; }
+            .le-combobox-input { width: 100%; box-sizing: border-box; }
+            .le-combobox-list { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; max-height: 220px; overflow-y: auto; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 6px; margin-top: 2px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+            .le-combobox-option { padding: 8px 10px; cursor: pointer; font-size: 14px; }
+            .le-combobox-option:hover { background: var(--secondary-background-color); }
+            .le-combobox-option-pinned { font-weight: 600; color: var(--primary-color); border-bottom: 1px solid var(--divider-color); }
             .bd-backfill { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
             .bd-backfill-pill { font-size: 12px; padding: 4px 10px; border-radius: 12px; border: 1px solid var(--divider-color); cursor: pointer; background: var(--secondary-background-color); color: var(--primary-text-color); }
             .bd-backfill-pill.active { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
@@ -1930,7 +2142,7 @@
           <ha-formfield label="${t("editor_collapsible")}">
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
-          ${renderEditorSelect("date_format", t("editor_date_format"), dateFormatOptions(), this._config.date_format || "short")}
+          ${renderDateFormatFields(this._config)}
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
@@ -1938,7 +2150,7 @@
       this.querySelector("#days_ahead").addEventListener("input", (e) => this._update({ days_ahead: Number(e.target.value) }));
       this.querySelector("#show_icon").addEventListener("change", (e) => this._update({ show_icon: e.target.checked }));
       this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
-      this.querySelector("#date_format").addEventListener("change", (e) => this._update({ date_format: e.target.value }));
+      bindDateFormatFields(this, this._config, (patch) => this._update(patch));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
     _update(patch) {
@@ -2174,14 +2386,14 @@
           <ha-formfield label="${t("editor_collapsible")}">
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
-          ${renderEditorSelect("date_format", t("editor_date_format"), dateFormatOptions(), this._config.date_format || "short")}
+          ${renderDateFormatFields(this._config)}
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
       `;
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
       this.querySelector("#columns").addEventListener("input", (e) => this._update({ columns: Number(e.target.value) }));
       this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
-      this.querySelector("#date_format").addEventListener("change", (e) => this._update({ date_format: e.target.value }));
+      bindDateFormatFields(this, this._config, (patch) => this._update(patch));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
     _update(patch) {
@@ -2760,7 +2972,7 @@
           <ha-formfield label="${t("editor_collapsible")}">
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
-          ${renderEditorSelect("date_format", t("editor_date_format"), dateFormatOptions(), this._config.date_format || "short")}
+          ${renderDateFormatFields(this._config)}
           ${renderEventTypeCheckboxes(this._config.event_types)}
           <div class="le-editor-label">${t("fixed_attrs_section_title")}</div>
           <div class="le-hint">${t("fixed_attrs_section_hint")}</div>
@@ -2773,7 +2985,7 @@
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
       this.querySelector("#display_mode").addEventListener("change", (e) => this._update({ display_mode: e.target.value }));
       this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
-      this.querySelector("#date_format").addEventListener("change", (e) => this._update({ date_format: e.target.value }));
+      bindDateFormatFields(this, this._config, (patch) => this._update(patch));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
       bindFixedAttrsSection(this, this._hass);
     }

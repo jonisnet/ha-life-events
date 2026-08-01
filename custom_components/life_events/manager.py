@@ -6,6 +6,7 @@ from datetime import date, timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
@@ -139,6 +140,22 @@ class LifeEventsManager:
         if missing:
             raise ServiceValidationError(f"Missing required attribute(s): {', '.join(missing)}")
 
+    def _purge_entity(self, entity: EventEntity) -> None:
+        """Fully remove an entity - registry entry AND state, not just mark it unavailable.
+
+        `Entity.async_remove(force_remove=True)` (the old approach here)
+        only ever removes the entity's *state* - the entity *registry*
+        entry (what Settings -> Entities keeps showing as "This entity is
+        no longer available from the life_events integration... can be
+        removed from Settings") is a completely separate record that call
+        never touches. Removing the registry entry directly is both
+        necessary and sufficient: HA's own entity_registry-updated listener
+        (subscribed by every Entity while added) reacts to the "remove"
+        event by clearing its state too, so there is nothing further to
+        call here.
+        """
+        er.async_get(self.hass).async_remove(entity.entity_id)
+
     # -- CRUD -----------------------------------------------------------------
 
     async def async_add_event(self, **fields) -> Event:
@@ -204,7 +221,7 @@ class LifeEventsManager:
         await self.store.async_save(list(self.events.values()))
         entity = self._entities.pop(event_id, None)
         if entity:
-            await entity.async_remove(force_remove=True)
+            self._purge_entity(entity)
         async_dispatcher_send(self.hass, self.signal)
 
     # -- Marriage linking --------------------------------------------------
@@ -293,7 +310,7 @@ class LifeEventsManager:
 
         if mode == "replace":
             for entity in list(self._entities.values()):
-                await entity.async_remove(force_remove=True)
+                self._purge_entity(entity)
             self._entities = {}
             self.events = {}
 
