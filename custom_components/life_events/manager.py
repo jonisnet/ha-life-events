@@ -177,6 +177,21 @@ class LifeEventsManager:
 
     # -- CRUD -----------------------------------------------------------------
 
+    def _refresh_parents(self, parent_ids: set[str]) -> None:
+        """Push a state update to each given parent's entity.
+
+        children_ids/children_names (see entity.py) is computed on read
+        from the CHILD's own parent_ids, not stored on the parent - so
+        without this, a parent's entity would keep showing its
+        last-computed children list until something unrelated happened to
+        refresh it (e.g. the midnight recompute), rather than reflecting a
+        just-added/removed link immediately.
+        """
+        for parent_id in parent_ids:
+            parent_entity = self._entities.get(parent_id)
+            if parent_entity:
+                parent_entity.async_write_ha_state()
+
     async def async_add_event(self, **fields) -> Event:
         self._check_required_attributes(fields.get("attributes") or {})
         event = Event.create(**fields)
@@ -186,6 +201,7 @@ class LifeEventsManager:
         new_entity = EventEntity(self, event.id)
         self._entities[event.id] = new_entity
         self._async_add_entities([new_entity])
+        self._refresh_parents(set(event.parent_ids))
         async_dispatcher_send(self.hass, self.signal)
         return event
 
@@ -216,12 +232,14 @@ class LifeEventsManager:
         }
         self._check_required_attributes(merged["attributes"])
         self._validate_parent_ids(event_id, merged["parent_ids"])
+        changed_parent_ids = set(current.parent_ids) ^ set(merged["parent_ids"])
         updated = Event.create(**merged)
         self.events[event_id] = updated
         await self.store.async_save(list(self.events.values()))
         entity = self._entities.get(event_id)
         if entity:
             entity.async_write_ha_state()
+        self._refresh_parents(changed_parent_ids)
         async_dispatcher_send(self.hass, self.signal)
         return updated
 
@@ -250,11 +268,16 @@ class LifeEventsManager:
                 child_entity = self._entities.get(child.id)
                 if child_entity:
                     child_entity.async_write_ha_state()
+        # Symmetrically, deleting a CHILD must refresh its former parents'
+        # entities too, so their children_ids/children_names drops it
+        # immediately rather than waiting on an unrelated refresh.
+        former_parent_ids = set(self.events[event_id].parent_ids)
         del self.events[event_id]
         await self.store.async_save(list(self.events.values()))
         entity = self._entities.pop(event_id, None)
         if entity:
             self._purge_entity(entity)
+        self._refresh_parents(former_parent_ids)
         async_dispatcher_send(self.hass, self.signal)
 
     # -- Marriage linking --------------------------------------------------

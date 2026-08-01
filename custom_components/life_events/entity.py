@@ -151,6 +151,17 @@ class EventEntity(Entity):
                 attrs["parent_names"] = parent_names
             if parent_phone_numbers:
                 attrs["parent_phone_numbers"] = parent_phone_numbers
+        # "Children of X" is the reverse of parent_ids - deliberately not
+        # stored anywhere (no mirrored children_ids field, see
+        # CONF_PARENT_IDS in const.py), computed here by scanning every
+        # other event for whoever lists this one as a parent. Same
+        # read-time-resolution spirit as spouse_name/parent_names above,
+        # just a reverse scan instead of a direct id lookup since there's
+        # no reverse index.
+        children = [other for other in self._manager.events.values() if event.id in other.parent_ids]
+        if children:
+            attrs["children_ids"] = [child.id for child in children]
+            attrs["children_names"] = [child.name for child in children]
         if event.phone_number:
             attrs["phone_number"] = event.phone_number
         if event.time:

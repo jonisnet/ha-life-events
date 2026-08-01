@@ -4,6 +4,22 @@ All notable changes to Life Events are documented here. Development happens
 in beta releases (`0.0.x-beta.N`) between occasional real releases, where
 this file is consolidated into one summary per real version.
 
+## 0.0.4-beta.3
+
+### Added
+- **"Children of X" on a parent's own record**: as soon as a parent is
+  linked to a child, the parent's own details popup now shows a
+  "Kinderen" row listing them back - computed live, updates immediately
+  when a link is added, changed, or removed (no separate "children" field
+  to maintain, it's the reverse of the child's own linked parents).
+
+### Fixed
+- **Searchable dropdowns (parent/spouse/phone-country pickers) could get
+  clipped halfway** when the combobox sat low in a long edit popup - the
+  list now flips upward and caps its own height to whatever room actually
+  exists, instead of always opening downward with a fixed height that
+  could run past the popup's edge.
+
 ## 0.0.4-beta.2
 
 ### Added

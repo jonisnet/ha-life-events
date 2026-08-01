@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.4-beta.2 loaded");
+  console.info("Life Events cards: v0.0.4-beta.3 loaded");
 
   const DOMAIN = "life_events";
 
@@ -205,6 +205,7 @@
     new_parent_firstname_label: "Voornaam nieuwe ouder",
     new_parent_lastname_label: "Achternaam nieuwe ouder (optioneel)",
     new_parent_birthdate_label: "Geboortedatum nieuwe ouder",
+    children_section_title: "Kinderen",
   };
 
   // Absolute directory this script itself was loaded from, used to fetch
@@ -484,7 +485,7 @@
     "years_since_death", "days_until_death_anniversary",
     "spouse_id", "spouse_name", "marriage_date", "married",
     "days_until_marriage_anniversary", "years_at_next_marriage_anniversary",
-    "parent_ids", "parent_names", "parent_phone_numbers",
+    "parent_ids", "parent_names", "parent_phone_numbers", "children_ids", "children_names",
   ]);
 
   function customAttributesOf(st) {
@@ -526,6 +527,7 @@
         parentIds: st.attributes.parent_ids || [],
         parentNames: st.attributes.parent_names || [],
         parentPhoneNumbers: st.attributes.parent_phone_numbers || [],
+        childrenNames: st.attributes.children_names || [],
         phoneNumber: st.attributes.phone_number,
         time: st.attributes.time,
         attributes: customAttributesOf(st),
@@ -804,6 +806,7 @@
       ]);
     }
     (e.parentPhoneNumbers || []).forEach((p) => rows.push([t("label_parent_phone", { name: p.name }), p.phone_number]));
+    if (e.childrenNames && e.childrenNames.length) rows.push([t("children_section_title"), e.childrenNames.join(", ")]);
     Object.entries(e.attributes || {}).forEach(([k, v]) => rows.push([k, v]));
     const rowsHtml = rows
       .map(
@@ -956,6 +959,33 @@
         .join("");
       listEl.innerHTML = extraHtml + matchesHtml;
       listEl.style.display = matches.length || extraOptions.length ? "" : "none";
+      positionList();
+    };
+
+    // The list is `position: absolute` inside `.le-combobox` (relative),
+    // opening downward via `top: 100%` by default - fine near the top of a
+    // form, but a combobox low in a long popup (e.g. the parent pickers,
+    // which sit below the marriage section) can have its dropdown clipped
+    // by `.bd-modal-body`'s `overflow-y: auto` / `.bd-modal`'s capped
+    // `max-height: 85vh`, since an absolutely-positioned descendant is
+    // still clipped by an ancestor's overflow even though it's out of
+    // normal flow. Flip to open upward when there's more room above than
+    // below, and always cap the height to whatever room actually exists
+    // (instead of a fixed 220px) so the list is never cut off either way.
+    const positionList = () => {
+      const scrollAncestor = root.querySelector(".bd-modal-body");
+      if (!scrollAncestor) return;
+      const boundsRect = scrollAncestor.getBoundingClientRect();
+      const inputRect = searchInput.getBoundingClientRect();
+      const spaceBelow = boundsRect.bottom - inputRect.bottom;
+      const spaceAbove = inputRect.top - boundsRect.top;
+      const openUpward = spaceBelow < 150 && spaceAbove > spaceBelow;
+      const available = Math.max(120, (openUpward ? spaceAbove : spaceBelow) - 8);
+      listEl.style.top = openUpward ? "auto" : "100%";
+      listEl.style.bottom = openUpward ? "100%" : "auto";
+      listEl.style.marginTop = openUpward ? "0" : "2px";
+      listEl.style.marginBottom = openUpward ? "2px" : "0";
+      listEl.style.maxHeight = `${Math.min(220, available)}px`;
     };
 
     const selectOption = (value) => {

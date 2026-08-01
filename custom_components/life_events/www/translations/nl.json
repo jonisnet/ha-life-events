@@ -151,5 +151,6 @@
   "action_divorce": "Scheiden",
   "marriage_date_label": "Trouwdatum",
   "editor_date_format": "Datumnotatie",
-  "yaml_edit_hint": "Technische veldnamen (Engels), niet vertaald - net als YAML-bewerken elders in Home Assistant."
+  "yaml_edit_hint": "Technische veldnamen (Engels), niet vertaald - net als YAML-bewerken elders in Home Assistant.",
+  "children_section_title": "Kinderen"
 }

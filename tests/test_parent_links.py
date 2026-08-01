@@ -187,6 +187,49 @@ async def test_parent_phone_numbers_only_includes_parents_with_a_phone_set(hass:
     assert phones[0]["phone_number"] == "+31611111111"
 
 
+async def test_a_parents_own_record_shows_the_reverse_children_link(hass: HomeAssistant) -> None:
+    """children_ids/children_names is the reverse of parent_ids, computed on
+    read (no mirrored field is ever stored on the parent's own record)."""
+    await _setup_entry(hass)
+    await _add_person(hass, "Vader", "1950-01-01")
+    await _add_person(hass, "Kind1", "2010-01-01", parent_ids=["vader"])
+    await _add_person(hass, "Kind2", "2012-01-01", parent_ids=["vader"])
+
+    vader = hass.states.get("life_events.vader")
+    assert set(vader.attributes["children_ids"]) == {"kind1", "kind2"}
+    assert set(vader.attributes["children_names"]) == {"Kind1", "Kind2"}
+
+
+async def test_children_ids_absent_when_no_children_are_linked(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+    await _add_person(hass, "Vader", "1950-01-01")
+
+    vader = hass.states.get("life_events.vader")
+    assert "children_ids" not in vader.attributes
+    assert "children_names" not in vader.attributes
+
+
+async def test_children_link_updates_live_when_a_parent_id_is_added_or_removed(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+    await _add_person(hass, "Vader", "1950-01-01")
+    await _add_person(hass, "Kind", "2010-01-01")
+
+    vader = hass.states.get("life_events.vader")
+    assert "children_ids" not in vader.attributes
+
+    await hass.services.async_call(
+        DOMAIN, "update_event", {"event_id": "kind", "parent_ids": ["vader"]}, blocking=True
+    )
+    await hass.async_block_till_done()
+    vader = hass.states.get("life_events.vader")
+    assert vader.attributes["children_ids"] == ["kind"]
+
+    await hass.services.async_call(DOMAIN, "update_event", {"event_id": "kind", "parent_ids": []}, blocking=True)
+    await hass.async_block_till_done()
+    vader = hass.states.get("life_events.vader")
+    assert "children_ids" not in vader.attributes
+
+
 async def test_a_deceased_person_can_be_linked_as_a_parent(hass: HomeAssistant) -> None:
     """Unlike the spouse picker, parent linking isn't restricted to birthday-type events."""
     await _setup_entry(hass)

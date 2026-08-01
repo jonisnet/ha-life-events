@@ -151,5 +151,6 @@
   "label_parent_phone": "Telefon von {name}",
   "new_parent_firstname_label": "Vorname des neuen Elternteils",
   "new_parent_lastname_label": "Nachname des neuen Elternteils (optional)",
-  "new_parent_birthdate_label": "Geburtsdatum des neuen Elternteils"
+  "new_parent_birthdate_label": "Geburtsdatum des neuen Elternteils",
+  "children_section_title": "Kinder"
 }
