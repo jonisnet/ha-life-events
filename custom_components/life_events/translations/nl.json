@@ -41,7 +41,7 @@
     },
     "link_marriage": {
       "name": "Huwelijk koppelen",
-      "description": "Trouw twee bestaande personen, waarbij beide records symmetrisch worden gekoppeld met een gedeelde jubileumdatum."
+      "description": "Koppel twee bestaande personen als partner of echtgenoot, symmetrisch, met een gedeelde datum."
     },
     "unlink_marriage": {
       "name": "Huwelijk ontkoppelen",

@@ -40,6 +40,21 @@ CONF_TIME = "time"
 # directly through add_event/update_event.
 CONF_SPOUSE_ID = "spouse_id"
 CONF_MARRIAGE_DATE = "marriage_date"
+# Whether the spouse_id/marriage_date link represents an actual wedding
+# (default, and the only case that existed before this field was added -
+# so every pre-existing linked record is genuinely married, zero migration
+# needed) or an unmarried partnership "since" marriage_date. Same
+# set/cleared-only-via-link/unlink-marriage rule as the two fields above.
+CONF_MARRIED = "married"
+# A child's 0-2 parents, by event id - stored only on the child's own
+# record (deliberately NOT mirrored as e.g. children_ids on the parent's
+# record - "children of X" is computed on read by scanning for whoever has
+# X in their own parent_ids, same spirit as spouse_name's read-time
+# resolution in entity.py). Settable through the normal add/update_event
+# services, unlike spouse_id/marriage_date - see manager.py's
+# _validate_parent_ids for why this one doesn't need its own link/unlink
+# service (no second record to keep in sync).
+CONF_PARENT_IDS = "parent_ids"
 
 # Legacy YAML fields (kept so existing configuration.yaml keeps validating during import)
 CONF_UNIQUE_ID = "unique_id"
@@ -111,5 +126,7 @@ CSV_FIELDNAMES = [
     CONF_PHONE_NUMBER,
     CONF_SPOUSE_ID,
     CONF_MARRIAGE_DATE,
+    CONF_MARRIED,
+    CONF_PARENT_IDS,
     CONF_ATTRIBUTES,
 ]

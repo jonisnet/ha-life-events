@@ -41,7 +41,7 @@
     },
     "link_marriage": {
       "name": "Lier un mariage",
-      "description": "Marier deux personnes existantes, en liant symétriquement les deux fiches avec une date d'anniversaire commune."
+      "description": "Lier symétriquement deux personnes existantes en tant qu'époux ou partenaires, avec une date commune."
     },
     "unlink_marriage": {
       "name": "Délier un mariage",

@@ -113,7 +113,7 @@ class EventEntity(Entity):
             days_until_death_anniversary = event.days_until_next_death_anniversary(today)
             if days_until_death_anniversary is not None:
                 attrs["days_until_death_anniversary"] = days_until_death_anniversary
-        if event.spouse_id and event.marriage_date:
+        if event.spouse_id:
             attrs["spouse_id"] = event.spouse_id
             spouse = self._manager.events.get(event.spouse_id)
             # Resolved here (not left to the frontend to look up its own
@@ -122,13 +122,35 @@ class EventEntity(Entity):
             # wants to show "married to X since Y".
             if spouse:
                 attrs["spouse_name"] = spouse.name
-            attrs["marriage_date"] = event.marriage_date.isoformat()
-            days_until_marriage_anniversary = event.days_until_next_marriage_anniversary(today)
-            if days_until_marriage_anniversary is not None:
-                attrs["days_until_marriage_anniversary"] = days_until_marriage_anniversary
-            years_at_next_marriage_anniversary = event.years_at_next_marriage_anniversary(today)
-            if years_at_next_marriage_anniversary is not None:
-                attrs["years_at_next_marriage_anniversary"] = years_at_next_marriage_anniversary
+            attrs["married"] = event.married
+            # marriage_date is optional - the exact date isn't always known
+            # (e.g. a couple already together before this integration
+            # existed) - the link is still real without it, just without an
+            # anniversary occasion until it's filled in later.
+            if event.marriage_date:
+                attrs["marriage_date"] = event.marriage_date.isoformat()
+                days_until_marriage_anniversary = event.days_until_next_marriage_anniversary(today)
+                if days_until_marriage_anniversary is not None:
+                    attrs["days_until_marriage_anniversary"] = days_until_marriage_anniversary
+                years_at_next_marriage_anniversary = event.years_at_next_marriage_anniversary(today)
+                if years_at_next_marriage_anniversary is not None:
+                    attrs["years_at_next_marriage_anniversary"] = years_at_next_marriage_anniversary
+        if event.parent_ids:
+            attrs["parent_ids"] = list(event.parent_ids)
+            parent_names = []
+            parent_phone_numbers = []
+            for parent_id in event.parent_ids:
+                # Resolved here for the same reason spouse_name is above -
+                # the manager already has every event in memory.
+                parent = self._manager.events.get(parent_id)
+                if parent:
+                    parent_names.append(parent.name)
+                    if parent.phone_number:
+                        parent_phone_numbers.append({"name": parent.name, "phone_number": parent.phone_number})
+            if parent_names:
+                attrs["parent_names"] = parent_names
+            if parent_phone_numbers:
+                attrs["parent_phone_numbers"] = parent_phone_numbers
         if event.phone_number:
             attrs["phone_number"] = event.phone_number
         if event.time:

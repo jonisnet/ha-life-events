@@ -37,6 +37,7 @@ ADD_EVENT_SCHEMA = vol.Schema(
         vol.Optional("icon"): cv.string,
         vol.Optional("phone_number"): cv.string,
         vol.Optional("time"): cv.string,
+        vol.Optional("parent_ids", default=[]): vol.All(cv.ensure_list, [cv.string], vol.Length(max=2)),
         vol.Optional("attributes", default={}): {cv.string: cv.string},
     }
 )
@@ -51,6 +52,7 @@ UPDATE_EVENT_SCHEMA = vol.Schema(
         vol.Optional("icon"): cv.string,
         vol.Optional("phone_number"): cv.string,
         vol.Optional("time"): cv.string,
+        vol.Optional("parent_ids"): vol.All(cv.ensure_list, [cv.string], vol.Length(max=2)),
         vol.Optional("attributes"): {cv.string: cv.string},
     }
 )
@@ -82,7 +84,12 @@ LINK_MARRIAGE_SCHEMA = vol.Schema(
     {
         vol.Required("event_id"): cv.string,
         vol.Required("spouse_id"): cv.string,
-        vol.Required("marriage_date"): cv.date,
+        # Optional: the exact date isn't always known (e.g. for a couple
+        # who were already married before this integration existed) - the
+        # link can still be recorded, just without an anniversary occasion
+        # until the date is filled in later via a plain update.
+        vol.Optional("marriage_date"): cv.date,
+        vol.Optional("married", default=True): cv.boolean,
     }
 )
 
@@ -140,7 +147,9 @@ def async_register_services(hass: HomeAssistant) -> None:
 
     async def _link_marriage(call: ServiceCall) -> None:
         manager = _manager_for_call(hass, call)
-        await manager.async_link_marriage(call.data["event_id"], call.data["spouse_id"], call.data["marriage_date"])
+        await manager.async_link_marriage(
+            call.data["event_id"], call.data["spouse_id"], call.data.get("marriage_date"), call.data["married"]
+        )
 
     async def _unlink_marriage(call: ServiceCall) -> None:
         manager = _manager_for_call(hass, call)

@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.4-beta.1 loaded");
+  console.info("Life Events cards: v0.0.4-beta.2 loaded");
 
   const DOMAIN = "life_events";
 
@@ -182,6 +182,29 @@
     action_divorce_confirm: "Ja, scheiden",
     marriage_anniversary_inline: "{years}-jarig huwelijk",
     marriage_anniversary_years_short: "{years} jaar getrouwd",
+    partnership_section_title: "Relatie",
+    label_partner_of: "Partner van {name} sinds {date}",
+    label_married_to_no_date: "Getrouwd met {name} (datum onbekend)",
+    label_partner_of_no_date: "Partner van {name} (datum onbekend)",
+    marriage_partner_no_date: "{name} (datum onbekend)",
+    action_end_partnership: "Relatie beëindigen",
+    confirm_end_partnership_question: "Deze relatie ontkoppelen?",
+    action_end_partnership_confirm: "Ja, beëindigen",
+    partnership_anniversary_inline: "{years} jaar samen",
+    partnership_anniversary_years_short: "{years} jaar samen",
+    field_married_checkbox: "Dit is een huwelijk (niet alleen een partnerschap)",
+    action_confirm_partnership: "Bevestig partnerschap",
+    action_add_marriage_date: "Datum toevoegen",
+    confirm_no_marriage_date_question: "Weet je zeker dat de datum (nog) niet bekend is?",
+    action_confirm_no_date: "Ja, doorgaan zonder datum",
+    parent_section_title: "Ouders",
+    parent_1_pick_label: "Kies ouder 1...",
+    parent_2_pick_label: "Kies ouder 2...",
+    parent_none_option: "— geen —",
+    label_parent_phone: "Telefoon van {name}",
+    new_parent_firstname_label: "Voornaam nieuwe ouder",
+    new_parent_lastname_label: "Achternaam nieuwe ouder (optioneel)",
+    new_parent_birthdate_label: "Geboortedatum nieuwe ouder",
   };
 
   // Absolute directory this script itself was loaded from, used to fetch
@@ -459,8 +482,9 @@
     "date_of_birth", "age_at_next_birthday", "event_type",
     "date_of_death", "phone_number", "time",
     "years_since_death", "days_until_death_anniversary",
-    "spouse_id", "spouse_name", "marriage_date",
+    "spouse_id", "spouse_name", "marriage_date", "married",
     "days_until_marriage_anniversary", "years_at_next_marriage_anniversary",
+    "parent_ids", "parent_names", "parent_phone_numbers",
   ]);
 
   function customAttributesOf(st) {
@@ -496,8 +520,12 @@
         spouseId: st.attributes.spouse_id,
         spouseName: st.attributes.spouse_name,
         marriageDate: st.attributes.marriage_date,
+        married: st.attributes.married !== false,
         daysUntilMarriageAnniversary: st.attributes.days_until_marriage_anniversary,
         yearsAtNextMarriageAnniversary: st.attributes.years_at_next_marriage_anniversary,
+        parentIds: st.attributes.parent_ids || [],
+        parentNames: st.attributes.parent_names || [],
+        parentPhoneNumbers: st.attributes.parent_phone_numbers || [],
         phoneNumber: st.attributes.phone_number,
         time: st.attributes.time,
         attributes: customAttributesOf(st),
@@ -767,9 +795,15 @@
     if (e.eventType !== "deceased" && e.age != null) rows.push([t("label_becomes"), e.age]);
     if (e.eventType === "deceased" && e.dateOfDeath) rows.push([t("label_date_of_death"), formatDate(e.dateOfDeath, dateFormat)]);
     if (e.phoneNumber) rows.push([t("label_phone"), e.phoneNumber]);
-    if (e.spouseId && e.marriageDate) {
-      rows.push([t("marriage_section_title"), t("marriage_partner_since", { name: e.spouseName || e.spouseId, date: formatDate(e.marriageDate, dateFormat) })]);
+    if (e.spouseId) {
+      rows.push([
+        t(e.married ? "marriage_section_title" : "partnership_section_title"),
+        e.marriageDate
+          ? t("marriage_partner_since", { name: e.spouseName || e.spouseId, date: formatDate(e.marriageDate, dateFormat) })
+          : t("marriage_partner_no_date", { name: e.spouseName || e.spouseId }),
+      ]);
     }
+    (e.parentPhoneNumbers || []).forEach((p) => rows.push([t("label_parent_phone", { name: p.name }), p.phone_number]));
     Object.entries(e.attributes || {}).forEach(([k, v]) => rows.push([k, v]));
     const rowsHtml = rows
       .map(
@@ -897,29 +931,31 @@
     `;
   }
 
-  // `extraOption` (optional {value, label}): always shown pinned at the top
-  // of the list regardless of the current filter text - used for the
-  // spouse picker's "+ Nieuw persoon aanmaken" entry, which must stay
-  // reachable even when nothing in the real candidate list matches what's
-  // been typed so far.
+  // `extraOption` (optional {value, label}, or an array of them): always
+  // shown pinned at the top of the list regardless of the current filter
+  // text - used for the spouse/parent pickers' "+ Nieuw persoon aanmaken"
+  // entry (and, for parent slots, also a "geen" clear entry), which must
+  // stay reachable even when nothing in the real candidate list matches
+  // what's been typed so far.
   function bindSearchableSelect(root, idPrefix, options, onChange, extraOption) {
     const searchInput = root.querySelector(`#${idPrefix}-search`);
     const valueInput = root.querySelector(`#${idPrefix}-value`);
     const listEl = root.querySelector(`#${idPrefix}-list`);
     if (!searchInput || !valueInput || !listEl) return;
-    const allForLookup = extraOption ? [extraOption, ...options] : options;
+    const extraOptions = Array.isArray(extraOption) ? extraOption : extraOption ? [extraOption] : [];
+    const allForLookup = [...extraOptions, ...options];
 
     const renderList = (filterText) => {
       const q = (filterText || "").trim().toLowerCase();
       const matches = (q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options).slice(0, 50);
-      const extraHtml = extraOption
-        ? `<div class="le-combobox-option le-combobox-option-pinned" data-value="${escapeAttr(extraOption.value)}">${escapeAttr(extraOption.label)}</div>`
-        : "";
+      const extraHtml = extraOptions
+        .map((o) => `<div class="le-combobox-option le-combobox-option-pinned" data-value="${escapeAttr(o.value)}">${escapeAttr(o.label)}</div>`)
+        .join("");
       const matchesHtml = matches
         .map((o) => `<div class="le-combobox-option" data-value="${escapeAttr(o.value)}">${escapeAttr(o.label)}</div>`)
         .join("");
       listEl.innerHTML = extraHtml + matchesHtml;
-      listEl.style.display = matches.length || extraOption ? "" : "none";
+      listEl.style.display = matches.length || extraOptions.length ? "" : "none";
     };
 
     const selectOption = (value) => {
@@ -970,6 +1006,21 @@
       .sort((a, b) => a.label.localeCompare(b.label));
   }
 
+  // Parent candidates, unlike spouse candidates: any event type (a
+  // deceased grandparent is still a valid parent to link) and no
+  // already-linked exclusion (one person can be the parent of several
+  // children) - only self and the OTHER parent slot's current pick are
+  // excluded, so the two slots can't both point at the same person.
+  function parentCandidates(hass, editingId, excludeId) {
+    return getEvents(hass, null)
+      .filter((c) => {
+        const id = c.entity_id.split(".")[1];
+        return id !== editingId && id !== excludeId;
+      })
+      .map((c) => ({ value: c.entity_id.split(".")[1], label: c.name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
   // Shared add/edit form body - used by the Manage card's popup and, when
   // "Bewerken" is clicked, by the Upcoming/Month cards' details popup too.
   // `editing` is null when adding a new event.
@@ -985,10 +1036,23 @@
   function renderMarriageSection(editing, editingId, hass) {
     if (!editing) return "";
     if (editing.spouseId) {
+      const hint = editing.marriageDate
+        ? t(editing.married ? "label_married_to" : "label_partner_of", { name: escapeAttr(editing.spouseName || editing.spouseId), date: formatDate(editing.marriageDate) })
+        : t(editing.married ? "label_married_to_no_date" : "label_partner_of_no_date", { name: escapeAttr(editing.spouseName || editing.spouseId) });
       return css`
-        <label>${t("marriage_section_title")}</label>
-        <div class="le-hint">${t("label_married_to", { name: escapeAttr(editing.spouseName || editing.spouseId), date: formatDate(editing.marriageDate) })}</div>
-        ${editing.eventType === "birthday" ? css`<button type="button" class="bd-btn secondary" data-action="start-divorce">${t("action_divorce")}</button>` : ""}
+        <label>${t(editing.married ? "marriage_section_title" : "partnership_section_title")}</label>
+        <div class="le-hint">${hint}</div>
+        ${
+          !editing.marriageDate
+            ? css`
+              <label>${t("marriage_date_label")}</label>
+              <input id="f-add-marriage-date" type="date" />
+              <button type="button" class="bd-btn secondary" data-action="confirm-add-marriage-date" data-spouse-id="${escapeAttr(editing.spouseId)}" data-married="${editing.married}">${t("action_add_marriage_date")}</button>
+              <div id="marriage-status" class="bd-secondary"></div>
+            `
+            : ""
+        }
+        ${editing.eventType === "birthday" ? css`<button type="button" class="bd-btn secondary" data-action="start-divorce" data-married="${editing.married}">${t(editing.married ? "action_divorce" : "action_end_partnership")}</button>` : ""}
       `;
     }
     if (editing.eventType !== "birthday") return "";
@@ -1006,8 +1070,44 @@
       </div>
       <label>${t("marriage_date_label")}</label>
       <input id="f-marriage-date" type="date" />
+      <div class="le-hint"><label><input type="checkbox" id="f-married" checked /> ${t("field_married_checkbox")}</label></div>
       <button type="button" class="bd-btn secondary" data-action="confirm-marriage">${t("action_confirm_marriage")}</button>
       <div id="marriage-status" class="bd-secondary"></div>
+    `;
+  }
+
+  // Two independent, optional parent slots - unlike marriage, rendered for
+  // ANY event type (a deceased grandparent is still a valid parent to
+  // link) and with no confirm button of its own: the picked ids are just
+  // part of the normal form payload, applied on the form's own Save button
+  // (see readFormFieldsRaw/validateAndBuildPayload) - there's no second
+  // record to keep in sync the way marriage's spouse_id is, so parent_ids
+  // rides the plain add/update_event path (see manager.py's
+  // _validate_parent_ids for the server-side rules: max 2, no self/dup/
+  // unknown id, no direct cycle).
+  function renderParentSection(editing, editingId, hass) {
+    const parentIds = editing ? editing.parentIds || [] : [];
+    const slotHtml = [0, 1]
+      .map((i) => {
+        const otherValue = parentIds[1 - i] || null;
+        const candidateOptions = parentCandidates(hass, editingId, otherValue);
+        return css`
+          <label>${t(i === 0 ? "parent_1_pick_label" : "parent_2_pick_label")}</label>
+          ${renderSearchableSelect(`f-parent-${i}`, candidateOptions, parentIds[i] || "", t(i === 0 ? "parent_1_pick_label" : "parent_2_pick_label"))}
+          <div id="f-new-parent-${i}-fields" style="display:none;">
+            <label>${t("new_parent_firstname_label")}</label>
+            <input id="f-new-parent-${i}-firstname" />
+            <label>${t("new_parent_lastname_label")}</label>
+            <input id="f-new-parent-${i}-lastname" />
+            <label>${t("new_parent_birthdate_label")}</label>
+            <input id="f-new-parent-${i}-birthdate" type="date" />
+          </div>
+        `;
+      })
+      .join("");
+    return css`
+      <label>${t("parent_section_title")}</label>
+      ${slotHtml}
     `;
   }
 
@@ -1047,6 +1147,7 @@
           })()}
         </div>
         ${renderMarriageSection(editing, editingId, hass)}
+        ${renderParentSection(editing, editingId, hass)}
         ${fixedAttributeFieldsHtml(editing)}
         <label>${t("field_custom_attrs")}</label>
         <div id="f-attrs-rows">${attrRowsHtml(freeformAttributesOf(editing ? editing.attributes : {}))}</div>
@@ -1116,6 +1217,7 @@
       `date_of_death: ${yamlLiteValue(fields.dateOfDeath)}`,
       `icon: ${yamlLiteValue(fields.icon)}`,
       `phone: ${yamlLiteValue(fields.phoneNumber)}`,
+      `parent_ids: ${yamlLiteValue((fields.parentIds || []).join(", "))}`,
     ];
     const attrKeys = Object.keys(fields.attributes || {});
     if (!attrKeys.length) {
@@ -1140,7 +1242,7 @@
   // save path goes through - so a typo here surfaces as the normal "Voornaam
   // en datum zijn verplicht" message, not a crash.
   function parseYamlLite(text) {
-    const fields = { firstName: "", lastName: "", eventType: "birthday", date: "", time: "", dateOfDeath: "", icon: "", phoneNumber: "", attributes: {} };
+    const fields = { firstName: "", lastName: "", eventType: "birthday", date: "", time: "", dateOfDeath: "", icon: "", phoneNumber: "", parentIds: [], attributes: {} };
     const KEY_MAP = { firstname: "firstName", lastname: "lastName", type: "eventType", date: "date", time: "time", date_of_death: "dateOfDeath", icon: "icon", phone: "phoneNumber" };
     let inAttributes = false;
     for (const rawLine of (text || "").split("\n")) {
@@ -1153,6 +1255,13 @@
       if (!indented) {
         inAttributes = key === "attributes";
         if (inAttributes) continue;
+        if (key === "parent_ids") {
+          fields.parentIds = value
+            .split(",")
+            .map((v) => v.trim())
+            .filter((v) => v);
+          continue;
+        }
         const fieldName = KEY_MAP[key];
         if (fieldName) fields[fieldName] = value;
       } else if (inAttributes && key) {
@@ -1175,6 +1284,7 @@
       icon: fields.icon,
       phoneNumber: fields.phoneNumber,
       eventType: fields.eventType,
+      parentIds: fields.parentIds || [],
       attributes: fields.attributes,
     };
   }
@@ -1207,7 +1317,14 @@
       if (key) attributes[key] = value;
     });
 
-    return { firstName, lastName, eventType, date, time, dateOfDeath, icon, phoneNumber, attributes };
+    const parentIds = [0, 1]
+      .map((i) => {
+        const el = root.querySelector(`#f-parent-${i}-value`);
+        return el ? el.value : "";
+      })
+      .filter((v) => v);
+
+    return { firstName, lastName, eventType, date, time, dateOfDeath, icon, phoneNumber, parentIds, attributes };
   }
 
   // Validates a `fields` object (from either readFormFieldsRaw() or
@@ -1250,6 +1367,10 @@
     // update_event fields are replaced wholesale, not merged (see
     // manager.py).
     data.time = fields.time || "";
+    // Always included (even []), so clearing a parent slot actually clears
+    // it - same "replaced wholesale, not merged" rule as time/attributes
+    // above (see manager.py's async_update_event merge dict).
+    data.parent_ids = fields.parentIds || [];
     data.attributes = fields.attributes;
     return { ok: true, data };
   }
@@ -1266,7 +1387,13 @@
   }
 
   async function saveEventForm(root, hass, editingId) {
-    return performSave(hass, editingId, readFormFieldsRaw(root));
+    const fields = readFormFieldsRaw(root);
+    if (fields.parentIds.includes("__new__")) {
+      const resolved = await resolveNewParentSlots(root, hass);
+      if (!resolved) return { ok: false, message: t("validation_required") };
+      fields.parentIds = resolved;
+    }
+    return performSave(hass, editingId, fields);
   }
 
   async function saveEventFormYaml(root, hass, editingId) {
@@ -1354,6 +1481,7 @@
       });
 
     bindMarriageSection(root, ctx);
+    bindParentSection(root, ctx);
     bindSearchableSelect(root, "f-phone-country", phoneCountryOptions(), null);
   }
 
@@ -1375,13 +1503,18 @@
       );
     }
 
+    const marriedCheckbox = root.querySelector("#f-married");
     const confirmMarriageBtn = root.querySelector('[data-action="confirm-marriage"]');
+    if (marriedCheckbox && confirmMarriageBtn) {
+      marriedCheckbox.addEventListener("change", () => {
+        confirmMarriageBtn.textContent = t(marriedCheckbox.checked ? "action_confirm_marriage" : "action_confirm_partnership");
+      });
+    }
     if (confirmMarriageBtn)
       confirmMarriageBtn.addEventListener("click", async () => {
         const statusEl = root.querySelector("#marriage-status");
-        const marriageDate = root.querySelector("#f-marriage-date").value;
         let spouseId = spouseValueInput ? spouseValueInput.value : "";
-        if (!marriageDate || !spouseId) {
+        if (!spouseId) {
           if (statusEl) statusEl.textContent = t("validation_required");
           return;
         }
@@ -1404,7 +1537,54 @@
             return;
           }
         }
-        await callService(ctx.hass, "link_marriage", { event_id: ctx.editingId, spouse_id: spouseId, marriage_date: marriageDate });
+        const married = root.querySelector("#f-married") ? root.querySelector("#f-married").checked : true;
+        const marriageDate = root.querySelector("#f-marriage-date").value;
+        const doLink = async () => {
+          const payload = { event_id: ctx.editingId, spouse_id: spouseId, married };
+          if (marriageDate) payload.marriage_date = marriageDate;
+          await callService(ctx.hass, "link_marriage", payload);
+          ctx.onRefresh();
+        };
+        if (marriageDate) {
+          await doLink();
+          return;
+        }
+        // No date given - a real, common case (a couple already together
+        // before this integration existed) - confirm that's intentional
+        // rather than silently linking with no anniversary date.
+        confirmMarriageBtn.outerHTML = css`
+          <div class="bd-confirm">
+            <span>${t("confirm_no_marriage_date_question")}</span>
+            <div class="bd-actions">
+              <button type="button" class="bd-btn" data-action="confirm-marriage-no-date">${t("action_confirm_no_date")}</button>
+              <button type="button" class="bd-btn secondary" data-action="cancel-marriage-no-date">${t("action_cancel")}</button>
+            </div>
+          </div>
+        `;
+        const confirmNoDateBtn = root.querySelector('[data-action="confirm-marriage-no-date"]');
+        if (confirmNoDateBtn) confirmNoDateBtn.addEventListener("click", doLink);
+        const cancelNoDateBtn = root.querySelector('[data-action="cancel-marriage-no-date"]');
+        if (cancelNoDateBtn) cancelNoDateBtn.addEventListener("click", () => ctx.onRefresh());
+      });
+
+    const addMarriageDateBtn = root.querySelector('[data-action="confirm-add-marriage-date"]');
+    if (addMarriageDateBtn)
+      addMarriageDateBtn.addEventListener("click", async () => {
+        const statusEl = root.querySelector("#marriage-status");
+        const newDate = root.querySelector("#f-add-marriage-date").value;
+        if (!newDate) {
+          if (statusEl) statusEl.textContent = t("validation_required");
+          return;
+        }
+        // marriage_date is deliberately not editable via plain
+        // update_event (see const.py) - re-linking the same pair is how an
+        // initially-unknown date gets filled in later.
+        await callService(ctx.hass, "link_marriage", {
+          event_id: ctx.editingId,
+          spouse_id: addMarriageDateBtn.dataset.spouseId,
+          marriage_date: newDate,
+          married: addMarriageDateBtn.dataset.married !== "false",
+        });
         ctx.onRefresh();
       });
 
@@ -1415,11 +1595,12 @@
         // renderEventFormBody's confirmDelete branch) - not the browser's
         // native confirm(). DOM-only swap of just this button, not a
         // re-render, for the same reason add-attr/edit-as-yaml are DOM-only.
+        const married = startDivorceBtn.dataset.married !== "false";
         startDivorceBtn.outerHTML = css`
           <div class="bd-confirm">
-            <span>${t("confirm_divorce_question")}</span>
+            <span>${t(married ? "confirm_divorce_question" : "confirm_end_partnership_question")}</span>
             <div class="bd-actions">
-              <button type="button" class="bd-btn danger" data-action="confirm-divorce">${t("action_divorce_confirm")}</button>
+              <button type="button" class="bd-btn danger" data-action="confirm-divorce">${t(married ? "action_divorce_confirm" : "action_end_partnership_confirm")}</button>
               <button type="button" class="bd-btn secondary" data-action="cancel-divorce">${t("action_cancel")}</button>
             </div>
           </div>
@@ -1433,6 +1614,64 @@
         const cancelDivorceBtn = root.querySelector('[data-action="cancel-divorce"]');
         if (cancelDivorceBtn) cancelDivorceBtn.addEventListener("click", () => ctx.onRefresh());
       });
+  }
+
+  // Binds both parent-slot comboboxes for renderParentSection()'s markup.
+  // No confirm button/service call of its own (unlike marriage) - a picked
+  // id is just written into the slot's hidden value input, read later by
+  // readFormFieldsRaw() as part of the normal form payload. The only
+  // service call this ever triggers is the same "create a new person
+  // inline" add_event used by the spouse picker's "__new__" option.
+  function bindParentSection(root, ctx) {
+    [0, 1].forEach((i) => {
+      const valueInput = root.querySelector(`#f-parent-${i}-value`);
+      if (!valueInput) return;
+      const otherValueInput = root.querySelector(`#f-parent-${1 - i}-value`);
+      bindSearchableSelect(
+        root,
+        `f-parent-${i}`,
+        parentCandidates(ctx.hass, ctx.editingId, otherValueInput ? otherValueInput.value : null),
+        (value) => {
+          const newFields = root.querySelector(`#f-new-parent-${i}-fields`);
+          if (newFields) newFields.style.display = value === "__new__" ? "" : "none";
+        },
+        [
+          { value: "", label: t("parent_none_option") },
+          { value: "__new__", label: t("marriage_new_person_option") },
+        ]
+      );
+    });
+  }
+
+  // Resolves both parent slots straight from the DOM into a final list of
+  // real event ids, creating a new person first for any slot still holding
+  // the "__new__" sentinel - called from saveEventForm before the normal
+  // validate/save path, since parent_ids (unlike marriage's spouse_id) is
+  // just a plain field in that payload, not its own dedicated link
+  // service. Reads slots directly (not fields.parentIds, which has
+  // already dropped empty slots and so can't tell two simultaneous
+  // "__new__" slots apart) - unambiguous per-slot resolution. Returns null
+  // (payload unusable) if a "__new__" slot is missing its required inline
+  // fields.
+  async function resolveNewParentSlots(root, hass) {
+    const resolved = [];
+    for (const i of [0, 1]) {
+      const valueInput = root.querySelector(`#f-parent-${i}-value`);
+      if (!valueInput) continue;
+      let value = valueInput.value;
+      if (value === "__new__") {
+        const firstName = root.querySelector(`#f-new-parent-${i}-firstname`).value.trim();
+        const birthDate = root.querySelector(`#f-new-parent-${i}-birthdate`).value;
+        if (!firstName || !birthDate) return null;
+        const lastName = root.querySelector(`#f-new-parent-${i}-lastname`).value.trim();
+        const name = lastName ? `${firstName} ${lastName}` : firstName;
+        const added = await callService(hass, "add_event", { name, date: birthDate }, true);
+        if (!added || !added.id) return null;
+        value = added.id;
+      }
+      if (value) resolved.push(value);
+    }
+    return resolved;
   }
 
   // Shared by the Upcoming and Month cards: a details popup that can flip
@@ -1974,10 +2213,11 @@
                 e.isDeathAnniversary && e.yearsSinceDeath != null
                   ? ` &middot; ${t("deceased_years_ago_short", { years: e.yearsSinceDeath })}`
                   : "";
-              const nickname = e.isMarriageAnniversary ? marriageAnniversaryNickname(e.yearsAtNextMarriageAnniversary) : null;
+              const nickname =
+                e.isMarriageAnniversary && e.married ? marriageAnniversaryNickname(e.yearsAtNextMarriageAnniversary) : null;
               const marriageText =
                 e.isMarriageAnniversary && e.yearsAtNextMarriageAnniversary != null
-                  ? ` &middot; ${t("marriage_anniversary_inline", { years: e.yearsAtNextMarriageAnniversary })}${nickname ? ` (${nickname})` : ""}`
+                  ? ` &middot; ${t(e.married ? "marriage_anniversary_inline" : "partnership_anniversary_inline", { years: e.yearsAtNextMarriageAnniversary })}${nickname ? ` (${nickname})` : ""}`
                   : "";
               return css`
               <div class="bd-row" data-action="details" data-id="${e.entity_id.split(".")[1]}">
@@ -2257,7 +2497,8 @@
                   <td>${
                     e.isMarriageAnniversary
                       ? e.yearsAtNextMarriageAnniversary != null
-                        ? marriageAnniversaryNickname(e.yearsAtNextMarriageAnniversary) || t("marriage_anniversary_years_short", { years: e.yearsAtNextMarriageAnniversary })
+                        ? (e.married && marriageAnniversaryNickname(e.yearsAtNextMarriageAnniversary)) ||
+                          t(e.married ? "marriage_anniversary_years_short" : "partnership_anniversary_years_short", { years: e.yearsAtNextMarriageAnniversary })
                         : ""
                       : e.isDeathAnniversary
                         ? e.yearsSinceDeath != null

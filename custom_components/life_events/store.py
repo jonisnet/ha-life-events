@@ -55,6 +55,7 @@ def export_events(events: list[Event], fmt: str) -> str:
         for event in events:
             row = event.to_storage_dict()
             row["attributes"] = json.dumps(row["attributes"], ensure_ascii=False)
+            row["parent_ids"] = json.dumps(row["parent_ids"], ensure_ascii=False)
             writer.writerow(row)
         return buffer.getvalue()
 
@@ -76,6 +77,11 @@ def parse_events(content: str, fmt: str) -> list[Event]:
                 attributes = json.loads(attributes)
             except json.JSONDecodeError:
                 attributes = {}
+            parent_ids = row.get("parent_ids") or "[]"
+            try:
+                parent_ids = json.loads(parent_ids)
+            except json.JSONDecodeError:
+                parent_ids = []
             events.append(
                 _coerce_row(
                     {
@@ -89,6 +95,8 @@ def parse_events(content: str, fmt: str) -> list[Event]:
                         "time": row.get("time") or None,
                         "spouse_id": row.get("spouse_id") or None,
                         "marriage_date": row.get("marriage_date") or None,
+                        "married": row.get("married"),
+                        "parent_ids": parent_ids,
                         "attributes": attributes,
                     }
                 )

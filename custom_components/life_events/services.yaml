@@ -46,6 +46,11 @@ add_event:
       description: "Optional time of day (e.g. birth time), purely informational."
       selector:
         time:
+    parent_ids:
+      required: false
+      description: "At most 2 event ids of this person's parents. Not mirrored on the parent's own record."
+      selector:
+        object:
     attributes:
       required: false
       description: Freeform extra attributes (key/value pairs).
@@ -94,6 +99,11 @@ update_event:
       description: "Optional time of day (e.g. birth time), purely informational."
       selector:
         time:
+    parent_ids:
+      required: false
+      description: "At most 2 event ids of this person's parents. Not mirrored on the parent's own record."
+      selector:
+        object:
     attributes:
       required: false
       selector:
@@ -168,9 +178,9 @@ get_fixed_attributes:
 link_marriage:
   name: Link marriage
   description: >-
-    Marry two existing persons, symmetrically linking both records with a
+    Link two existing persons as spouses or partners, symmetrically, with a
     shared anniversary date. Normally called from the Manage/Upcoming/Month
-    cards' "Trouwen" action, not directly.
+    cards' "Trouwen"/"Koppelen" action, not directly.
   fields:
     event_id:
       required: true
@@ -184,6 +194,12 @@ link_marriage:
       required: true
       selector:
         date:
+    married:
+      required: false
+      default: true
+      description: "True = getrouwd, False = ongehuwd partnerschap sinds deze datum."
+      selector:
+        boolean:
 
 unlink_marriage:
   name: Unlink marriage

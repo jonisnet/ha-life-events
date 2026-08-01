@@ -41,7 +41,7 @@
     },
     "link_marriage": {
       "name": "Ehe verknüpfen",
-      "description": "Zwei bestehende Personen heiraten und beide Datensätze symmetrisch mit einem gemeinsamen Jubiläumsdatum verknüpfen."
+      "description": "Zwei bestehende Personen symmetrisch als Ehepartner oder Partner mit einem gemeinsamen Datum verknüpfen."
     },
     "unlink_marriage": {
       "name": "Ehe trennen",

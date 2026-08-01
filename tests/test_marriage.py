@@ -195,3 +195,104 @@ async def test_link_marriage_rejects_marrying_self(hass: HomeAssistant) -> None:
         await hass.services.async_call(
             DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "cees", "marriage_date": "2012-02-14"}, blocking=True
         )
+
+
+async def test_link_marriage_with_married_false_sets_it_symmetrically(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+
+    await hass.services.async_call(
+        DOMAIN,
+        "link_marriage",
+        {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14", "married": False},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    cees = hass.states.get("life_events.cees")
+    nicole = hass.states.get("life_events.nicole")
+    assert cees.attributes["married"] is False
+    assert nicole.attributes["married"] is False
+
+
+async def test_link_marriage_defaults_married_to_true_when_omitted(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    cees = hass.states.get("life_events.cees")
+    assert cees.attributes["married"] is True
+
+
+async def test_updating_an_unrelated_field_does_not_change_married(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+    await hass.services.async_call(
+        DOMAIN,
+        "link_marriage",
+        {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14", "married": False},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(DOMAIN, "update_event", {"event_id": "cees", "icon": "mdi:account"}, blocking=True)
+    await hass.async_block_till_done()
+
+    cees = hass.states.get("life_events.cees")
+    assert cees.attributes["married"] is False
+
+
+async def test_link_marriage_without_a_date_omits_marriage_date_but_keeps_spouse_id(hass: HomeAssistant) -> None:
+    """The exact date isn't always known - the link is still real without it."""
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    cees = hass.states.get("life_events.cees")
+    nicole = hass.states.get("life_events.nicole")
+    assert cees.attributes["spouse_id"] == "nicole"
+    assert cees.attributes["married"] is True
+    assert "marriage_date" not in cees.attributes
+    assert "days_until_marriage_anniversary" not in cees.attributes
+    assert "years_at_next_marriage_anniversary" not in cees.attributes
+    assert nicole.attributes["spouse_id"] == "cees"
+    assert "marriage_date" not in nicole.attributes
+
+
+async def test_relinking_the_same_pair_fills_in_a_previously_unknown_date(hass: HomeAssistant) -> None:
+    """Re-calling link_marriage on the same pair is how an initially-unknown
+    date gets filled in later, since marriage_date isn't caller-settable via
+    plain update_event."""
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "married": False}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        DOMAIN,
+        "link_marriage",
+        {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "1999-09-09", "married": False},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    cees = hass.states.get("life_events.cees")
+    nicole = hass.states.get("life_events.nicole")
+    assert cees.attributes["marriage_date"] == "1999-09-09"
+    assert cees.attributes["married"] is False
+    assert nicole.attributes["marriage_date"] == "1999-09-09"

@@ -204,3 +204,57 @@ def test_csv_export_import_roundtrip_keeps_time():
     content = export_events(events, "csv")
     parsed = parse_events(content, "csv")
     assert parsed[0].time == "14:37"
+
+
+def test_married_defaults_to_true():
+    event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22))
+    assert event.married is True
+
+
+def test_married_false_roundtrips_through_storage():
+    event = Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", married=False)
+    restored = Event.from_storage_dict(event.to_storage_dict())
+    assert restored.married is False
+
+
+def test_pre_feature_stored_event_without_married_key_defaults_to_true():
+    """A record saved before `married` existed must still load as married=True."""
+    raw = Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole").to_storage_dict()
+    del raw["married"]
+    restored = Event.from_storage_dict(raw)
+    assert restored.married is True
+
+
+def test_csv_export_import_roundtrip_keeps_married_false():
+    """Regression test: bool("False") is True in Python - a naive coercion
+    on the CSV read-back path would silently flip every unmarried partner
+    back to "married" on export/import."""
+    events = [Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", married=False)]
+    content = export_events(events, "csv")
+    parsed = parse_events(content, "csv")
+    assert parsed[0].married is False
+
+
+def test_csv_export_import_roundtrip_keeps_married_true():
+    events = [Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", married=True)]
+    content = export_events(events, "csv")
+    parsed = parse_events(content, "csv")
+    assert parsed[0].married is True
+
+
+def test_parent_ids_defaults_to_empty_list():
+    event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22))
+    assert event.parent_ids == []
+
+
+def test_parent_ids_roundtrips_through_storage():
+    event = Event.create(name="Kind", date_=date(2010, 1, 1), parent_ids=["ouder_1", "ouder_2"])
+    restored = Event.from_storage_dict(event.to_storage_dict())
+    assert restored.parent_ids == ["ouder_1", "ouder_2"]
+
+
+def test_csv_export_import_roundtrip_keeps_parent_ids():
+    events = [Event.create(name="Kind", date_=date(2010, 1, 1), parent_ids=["ouder_1", "ouder_2"])]
+    content = export_events(events, "csv")
+    parsed = parse_events(content, "csv")
+    assert parsed[0].parent_ids == ["ouder_1", "ouder_2"]

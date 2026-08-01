@@ -41,7 +41,7 @@
     },
     "link_marriage": {
       "name": "Link marriage",
-      "description": "Marry two existing persons, symmetrically linking both records with a shared anniversary date."
+      "description": "Link two existing persons as spouses or partners, symmetrically, with a shared anniversary date."
     },
     "unlink_marriage": {
       "name": "Unlink marriage",

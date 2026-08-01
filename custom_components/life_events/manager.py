@@ -156,11 +156,31 @@ class LifeEventsManager:
         """
         er.async_get(self.hass).async_remove(entity.entity_id)
 
+    def _validate_parent_ids(self, event_id: str, parent_ids: list[str]) -> None:
+        """Enforce the max-2, no-self/duplicate/unknown-id, direct-cycle rules.
+
+        Deliberately only a direct-cycle guard (can't set your own child as
+        your own parent) - full multi-generation ancestry checking is out
+        of scope, this just prevents the one obviously-wrong case.
+        """
+        if len(parent_ids) > 2:
+            raise ServiceValidationError("A person can have at most 2 linked parents")
+        if len(set(parent_ids)) != len(parent_ids):
+            raise ServiceValidationError("Duplicate parent id")
+        if event_id in parent_ids:
+            raise ServiceValidationError("A person cannot be their own parent")
+        for parent_id in parent_ids:
+            if parent_id not in self.events:
+                raise ServiceValidationError(f"Unknown parent event id: {parent_id}")
+            if event_id in self.events[parent_id].parent_ids:
+                raise ServiceValidationError("Cannot set your own child as your parent")
+
     # -- CRUD -----------------------------------------------------------------
 
     async def async_add_event(self, **fields) -> Event:
         self._check_required_attributes(fields.get("attributes") or {})
         event = Event.create(**fields)
+        self._validate_parent_ids(event.id, event.parent_ids)
         self.events[event.id] = event
         await self.store.async_save(list(self.events.values()))
         new_entity = EventEntity(self, event.id)
@@ -190,9 +210,12 @@ class LifeEventsManager:
             # an existing marriage link.
             "spouse_id": current.spouse_id,
             "marriage_date": current.marriage_date,
+            "married": current.married,
+            "parent_ids": fields.get("parent_ids", current.parent_ids),
             "attributes": fields.get("attributes", current.attributes),
         }
         self._check_required_attributes(merged["attributes"])
+        self._validate_parent_ids(event_id, merged["parent_ids"])
         updated = Event.create(**merged)
         self.events[event_id] = updated
         await self.store.async_save(list(self.events.values()))
@@ -214,9 +237,19 @@ class LifeEventsManager:
             spouse = self.events[spouse_id]
             spouse.spouse_id = None
             spouse.marriage_date = None
+            spouse.married = True
             spouse_entity = self._entities.get(spouse_id)
             if spouse_entity:
                 spouse_entity.async_write_ha_state()
+        # No reverse index from parent -> children (deliberate, see
+        # CONF_PARENT_IDS in const.py), so freeing a deleted parent from
+        # every child that referenced it means scanning all events.
+        for child in self.events.values():
+            if child.id != event_id and event_id in child.parent_ids:
+                child.parent_ids = [pid for pid in child.parent_ids if pid != event_id]
+                child_entity = self._entities.get(child.id)
+                if child_entity:
+                    child_entity.async_write_ha_state()
         del self.events[event_id]
         await self.store.async_save(list(self.events.values()))
         entity = self._entities.pop(event_id, None)
@@ -247,13 +280,24 @@ class LifeEventsManager:
         if old_spouse and old_spouse.event_type != EVENT_TYPE_DECEASED:
             old_spouse.spouse_id = None
             old_spouse.marriage_date = None
+            old_spouse.married = True
             freed_id = old_spouse_id
         event.spouse_id = None
         event.marriage_date = None
+        event.married = True
         return freed_id
 
-    async def async_link_marriage(self, event_id: str, spouse_id: str, marriage_date: date) -> None:
-        """Marry two existing persons, symmetrically linking both records."""
+    async def async_link_marriage(
+        self, event_id: str, spouse_id: str, marriage_date: date | None, married: bool = True
+    ) -> None:
+        """Link two existing persons as spouses/partners, symmetrically.
+
+        marriage_date may be None - the link/anniversary date isn't always
+        known up front (e.g. a couple already married before this
+        integration existed) - the link is still recorded, just without an
+        anniversary occasion until the date is filled in via a plain
+        update_event later.
+        """
         if event_id not in self.events:
             raise ServiceValidationError(f"Unknown event id: {event_id}")
         if spouse_id not in self.events:
@@ -270,8 +314,10 @@ class LifeEventsManager:
 
         self.events[event_id].spouse_id = spouse_id
         self.events[event_id].marriage_date = marriage_date
+        self.events[event_id].married = married
         self.events[spouse_id].spouse_id = event_id
         self.events[spouse_id].marriage_date = marriage_date
+        self.events[spouse_id].married = married
 
         await self.store.async_save(list(self.events.values()))
         affected = {event_id, spouse_id}
@@ -293,10 +339,12 @@ class LifeEventsManager:
         spouse_id = event.spouse_id
         event.spouse_id = None
         event.marriage_date = None
+        event.married = True
         if spouse_id and spouse_id in self.events:
             spouse = self.events[spouse_id]
             spouse.spouse_id = None
             spouse.marriage_date = None
+            spouse.married = True
 
         await self.store.async_save(list(self.events.values()))
         for eid in (event_id, spouse_id):

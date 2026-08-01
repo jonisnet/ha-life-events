@@ -4,6 +4,30 @@ All notable changes to Life Events are documented here. Development happens
 in beta releases (`0.0.x-beta.N`) between occasional real releases, where
 this file is consolidated into one summary per real version.
 
+## 0.0.4-beta.2
+
+### Added
+- **Unmarried partners**: linking two people no longer has to mean a
+  wedding - a new "Dit is een huwelijk" checkbox on the link mini-form
+  (checked by default, so every existing link stays a marriage unchanged)
+  lets you record a partnership without one. Cards, wording, and the
+  wedding-anniversary nicknames (zilveren bruiloft, etc.) all adapt - an
+  unmarried partnership shows a plain "X jaar samen" instead.
+- **Marriage/partnership date is now optional**: not everyone's exact
+  anniversary date is known. Linking without one now asks for confirmation
+  first, then records the link anyway - the couple/partners show up
+  correctly everywhere, just without an anniversary occasion until the
+  date is filled in later (a new "Datum toevoegen" action appears on their
+  record for exactly that).
+- **Parent-child linking**: any person can be linked to up to 2 parents
+  (optional, not required to match) via two new searchable pickers on the
+  edit form - unlike the spouse picker, any person can be a parent
+  regardless of type, so a deceased grandparent can be linked too.
+- **Phone number of linked parents**: a person's details popup now shows
+  the phone number of each linked parent that has one set, resolved live -
+  this is what originally motivated the parent-linking feature: seeing a
+  child's parents' phone numbers without re-entering them.
+
 ## 0.0.4-beta.1
 
 ### Fixed
