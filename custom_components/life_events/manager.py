@@ -257,9 +257,18 @@ class LifeEventsManager:
         }
         self._check_required_attributes(merged["attributes"])
         self._validate_parent_ids(event_id, merged["parent_ids"])
-        self._validate_primary_contact_id(
-            current.spouse_id, merged["parent_ids"], merged["primary_contact_id"]
-        )
+        # Only validated when the caller is actually setting/changing
+        # primary_contact_id in this call - not on every update. Otherwise
+        # an unrelated change that happens to invalidate an EXISTING,
+        # untouched primary_contact_id (e.g. clearing parent_ids here)
+        # would wrongly reject the whole update instead of just letting
+        # entity.py's defensive read-time resolution quietly stop honoring
+        # the now-stale reference, per _validate_primary_contact_id's own
+        # docstring ("only a set-time guard").
+        if "primary_contact_id" in fields:
+            self._validate_primary_contact_id(
+                current.spouse_id, merged["parent_ids"], merged["primary_contact_id"]
+            )
         changed_parent_ids = set(current.parent_ids) ^ set(merged["parent_ids"])
         updated = Event.create(**merged)
         self.events[event_id] = updated
