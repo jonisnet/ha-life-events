@@ -194,12 +194,16 @@ link_marriage:
       required: true
       selector:
         date:
-    married:
+    relationship_type:
       required: false
-      default: true
-      description: "True = getrouwd, False = ongehuwd partnerschap sinds deze datum."
+      default: married
+      description: "married = getrouwd, registered_partnership = geregistreerd partnerschap, relationship = relatie."
       selector:
-        boolean:
+        select:
+          options:
+            - married
+            - registered_partnership
+            - relationship
 
 unlink_marriage:
   name: Unlink marriage

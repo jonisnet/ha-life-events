@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.4-beta.3 loaded");
+  console.info("Life Events cards: v0.0.4-beta.4 loaded");
 
   const DOMAIN = "life_events";
 
@@ -192,7 +192,13 @@
     action_end_partnership_confirm: "Ja, beëindigen",
     partnership_anniversary_inline: "{years} jaar samen",
     partnership_anniversary_years_short: "{years} jaar samen",
-    field_married_checkbox: "Dit is een huwelijk (niet alleen een partnerschap)",
+    relationship_type_field_label: "Soort relatie",
+    relationship_type_option_married: "Getrouwd",
+    relationship_type_option_registered_partnership: "Geregistreerd partnerschap",
+    relationship_type_option_relationship: "Relatie",
+    registered_partnership_section_title: "Geregistreerd partnerschap",
+    label_partner_of_bare: "Partner van {name}",
+    label_anniversary_nickname: "Mijlpaal",
     action_confirm_partnership: "Bevestig partnerschap",
     action_add_marriage_date: "Datum toevoegen",
     confirm_no_marriage_date_question: "Weet je zeker dat de datum (nog) niet bekend is?",
@@ -483,9 +489,10 @@
     "date_of_birth", "age_at_next_birthday", "event_type",
     "date_of_death", "phone_number", "time",
     "years_since_death", "days_until_death_anniversary",
-    "spouse_id", "spouse_name", "marriage_date", "married",
+    "spouse_id", "spouse_name", "marriage_date", "relationship_type",
     "days_until_marriage_anniversary", "years_at_next_marriage_anniversary",
     "parent_ids", "parent_names", "parent_phone_numbers", "children_ids", "children_names",
+    "partner_ids", "partner_names",
   ]);
 
   function customAttributesOf(st) {
@@ -521,13 +528,16 @@
         spouseId: st.attributes.spouse_id,
         spouseName: st.attributes.spouse_name,
         marriageDate: st.attributes.marriage_date,
-        married: st.attributes.married !== false,
+        relationshipType: st.attributes.relationship_type || "married",
         daysUntilMarriageAnniversary: st.attributes.days_until_marriage_anniversary,
         yearsAtNextMarriageAnniversary: st.attributes.years_at_next_marriage_anniversary,
         parentIds: st.attributes.parent_ids || [],
         parentNames: st.attributes.parent_names || [],
         parentPhoneNumbers: st.attributes.parent_phone_numbers || [],
         childrenNames: st.attributes.children_names || [],
+        partnerIds: st.attributes.partner_ids || [],
+        partnerNames: st.attributes.partner_names || [],
+        isCoupleAnniversary: (st.attributes.partner_ids || []).length === 2,
         phoneNumber: st.attributes.phone_number,
         time: st.attributes.time,
         attributes: customAttributesOf(st),
@@ -552,16 +562,25 @@
     return (table && table[years]) || null;
   }
 
-  // A deceased person (with a date_of_death) and/or a married person (with
-  // a linked spouse) appear as EXTRA occasions in the "what's coming up"
-  // cards (Upcoming/Month), alongside their own row:
-  //   - death anniversary: own row split into a birthday occasion
-  //     (age-less, unchanged) and a death-anniversary occasion
-  //     (years-since-death shown) - the two are independent, not merged.
-  //   - marriage anniversary: ONE extra combined "A & B" row per couple,
-  //     not two (one from each spouse's own record) - emitted only by
-  //     whichever of the two entity_ids sorts alphabetically first, a
-  //     stable tie-break that needs no extra stored state.
+  // Shared 3-way lookup for the "Huwelijk"/"Geregistreerd partnerschap"/
+  // "Relatie" section title, keyed by relationshipType - used both in the
+  // read-only details view and the link mini-form.
+  function relationshipSectionTitleKey(relationshipType) {
+    if (relationshipType === "registered_partnership") return "registered_partnership_section_title";
+    if (relationshipType === "relationship") return "partnership_section_title";
+    return "marriage_section_title";
+  }
+
+  // A deceased person (with a date_of_death) appears as an EXTRA occasion
+  // in the "what's coming up" cards (Upcoming/Month), alongside their own
+  // row: own row split into a birthday occasion (age-less, unchanged) and
+  // a death-anniversary occasion (years-since-death shown) - the two are
+  // independent, not merged.
+  // A couple's wedding/relationship anniversary is NOT synthesized here -
+  // it's a real, independent entity (event_type="anniversary",
+  // isCoupleAnniversary via getEvents()'s partner_ids check), created/
+  // updated by LifeEventsManager._upsert_anniversary_entity and flowing
+  // through getEvents() unaided, same as any other entity.
   // Only used by those two cards' own event lists, NOT by getEvents()
   // itself: the Manage card's entity-management list (_baseEvents()) must
   // keep showing each real entity exactly once, so it must keep calling
@@ -576,25 +595,6 @@
         hasOwnSplit = true;
       }
       if (!hasOwnSplit) out.push(e);
-      if (
-        e.spouseId &&
-        e.marriageDate &&
-        e.daysUntilMarriageAnniversary != null &&
-        e.entity_id.split(".")[1] < e.spouseId
-      ) {
-        out.push({
-          ...e,
-          isMarriageAnniversary: true,
-          eventType: "anniversary",
-          name: e.spouseName ? `${e.name} & ${e.spouseName}` : e.name,
-          date: e.marriageDate,
-          days: e.daysUntilMarriageAnniversary,
-          // Overrides the inherited personal icon (e.g. mdi:cake) - this
-          // row represents the couple's anniversary, not either person's
-          // own birthday.
-          icon: EVENT_TYPE_ICONS.anniversary,
-        });
-      }
     });
     return out;
   }
@@ -798,12 +798,22 @@
     if (e.eventType === "deceased" && e.dateOfDeath) rows.push([t("label_date_of_death"), formatDate(e.dateOfDeath, dateFormat)]);
     if (e.phoneNumber) rows.push([t("label_phone"), e.phoneNumber]);
     if (e.spouseId) {
-      rows.push([
-        t(e.married ? "marriage_section_title" : "partnership_section_title"),
-        e.marriageDate
-          ? t("marriage_partner_since", { name: e.spouseName || e.spouseId, date: formatDate(e.marriageDate, dateFormat) })
-          : t("marriage_partner_no_date", { name: e.spouseName || e.spouseId }),
-      ]);
+      let partnerValue;
+      if (e.marriageDate) {
+        partnerValue = t("marriage_partner_since", { name: e.spouseName || e.spouseId, date: formatDate(e.marriageDate, dateFormat) });
+      } else if (e.relationshipType === "relationship") {
+        // No date-related text at all for an informal relationship - the
+        // date genuinely isn't expected to be known, unlike married/
+        // registered_partnership.
+        partnerValue = t("label_partner_of_bare", { name: e.spouseName || e.spouseId });
+      } else {
+        partnerValue = t("marriage_partner_no_date", { name: e.spouseName || e.spouseId });
+      }
+      rows.push([t(relationshipSectionTitleKey(e.relationshipType)), partnerValue]);
+    }
+    if (e.isCoupleAnniversary) {
+      const nickname = e.relationshipType === "married" ? marriageAnniversaryNickname(e.age) : null;
+      if (nickname) rows.push([t("label_anniversary_nickname"), nickname]);
     }
     (e.parentPhoneNumbers || []).forEach((p) => rows.push([t("label_parent_phone", { name: p.name }), p.phone_number]));
     if (e.childrenNames && e.childrenNames.length) rows.push([t("children_section_title"), e.childrenNames.join(", ")]);
@@ -1045,7 +1055,7 @@
     return getEvents(hass, null)
       .filter((c) => {
         const id = c.entity_id.split(".")[1];
-        return id !== editingId && id !== excludeId;
+        return id !== editingId && id !== excludeId && !c.isCoupleAnniversary;
       })
       .map((c) => ({ value: c.entity_id.split(".")[1], label: c.name }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -1066,23 +1076,41 @@
   function renderMarriageSection(editing, editingId, hass) {
     if (!editing) return "";
     if (editing.spouseId) {
-      const hint = editing.marriageDate
-        ? t(editing.married ? "label_married_to" : "label_partner_of", { name: escapeAttr(editing.spouseName || editing.spouseId), date: formatDate(editing.marriageDate) })
-        : t(editing.married ? "label_married_to_no_date" : "label_partner_of_no_date", { name: escapeAttr(editing.spouseName || editing.spouseId) });
+      // "Partner van X" phrasing covers both registered_partnership and
+      // relationship - the section title above already disambiguates which
+      // of the two it is, so only "married" needs its own wording.
+      let hint;
+      if (editing.marriageDate) {
+        hint = t(editing.relationshipType === "married" ? "label_married_to" : "label_partner_of", {
+          name: escapeAttr(editing.spouseName || editing.spouseId),
+          date: formatDate(editing.marriageDate),
+        });
+      } else if (editing.relationshipType === "relationship") {
+        // No date-related wording at all for an informal relationship.
+        hint = t("label_partner_of_bare", { name: escapeAttr(editing.spouseName || editing.spouseId) });
+      } else {
+        hint = t(editing.relationshipType === "married" ? "label_married_to_no_date" : "label_partner_of_no_date", {
+          name: escapeAttr(editing.spouseName || editing.spouseId),
+        });
+      }
       return css`
-        <label>${t(editing.married ? "marriage_section_title" : "partnership_section_title")}</label>
+        <label>${t(relationshipSectionTitleKey(editing.relationshipType))}</label>
         <div class="le-hint">${hint}</div>
         ${
           !editing.marriageDate
             ? css`
               <label>${t("marriage_date_label")}</label>
               <input id="f-add-marriage-date" type="date" />
-              <button type="button" class="bd-btn secondary" data-action="confirm-add-marriage-date" data-spouse-id="${escapeAttr(editing.spouseId)}" data-married="${editing.married}">${t("action_add_marriage_date")}</button>
+              <button type="button" class="bd-btn secondary" data-action="confirm-add-marriage-date" data-spouse-id="${escapeAttr(editing.spouseId)}" data-relationship-type="${editing.relationshipType}">${t("action_add_marriage_date")}</button>
               <div id="marriage-status" class="bd-secondary"></div>
             `
             : ""
         }
-        ${editing.eventType === "birthday" ? css`<button type="button" class="bd-btn secondary" data-action="start-divorce" data-married="${editing.married}">${t(editing.married ? "action_divorce" : "action_end_partnership")}</button>` : ""}
+        ${
+          editing.eventType === "birthday"
+            ? css`<button type="button" class="bd-btn secondary" data-action="start-divorce" data-relationship-type="${editing.relationshipType}">${t(editing.relationshipType === "married" ? "action_divorce" : "action_end_partnership")}</button>`
+            : ""
+        }
       `;
     }
     if (editing.eventType !== "birthday") return "";
@@ -1100,7 +1128,12 @@
       </div>
       <label>${t("marriage_date_label")}</label>
       <input id="f-marriage-date" type="date" />
-      <div class="le-hint"><label><input type="checkbox" id="f-married" checked /> ${t("field_married_checkbox")}</label></div>
+      <label>${t("relationship_type_field_label")}</label>
+      <select id="f-relationship-type">
+        <option value="married" selected>${t("relationship_type_option_married")}</option>
+        <option value="registered_partnership">${t("relationship_type_option_registered_partnership")}</option>
+        <option value="relationship">${t("relationship_type_option_relationship")}</option>
+      </select>
       <button type="button" class="bd-btn secondary" data-action="confirm-marriage">${t("action_confirm_marriage")}</button>
       <div id="marriage-status" class="bd-secondary"></div>
     `;
@@ -1199,6 +1232,42 @@
                 <button class="bd-btn secondary" data-action="cancel">${t("action_cancel")}</button>
                 <button type="button" class="bd-btn secondary" data-action="edit-as-yaml">${t("action_edit_yaml")}</button>
                 ${editing ? `<button class="bd-btn danger" data-action="delete" data-id="${editingId}">${t("action_delete")}</button>` : ""}
+              </div>
+            `
+        }
+      </div>
+    `;
+  }
+
+  // Read-only view for an auto-created couple's-anniversary entity (see
+  // isCoupleAnniversary in getEvents()) - no Save/Edit-as-YAML, since
+  // editing its date directly here would silently desync it from the two
+  // partners' own marriage_date (the "official" way to change it is
+  // re-linking via either partner's own edit form - see the "add date
+  // later" flow in bindMarriageSection). Delete is the only action, and
+  // symmetrically unlinks both partners (see manager.py's
+  // async_delete_event). Reuses the same delete-confirm data-actions as
+  // renderEventFormBody, so bindEventFormEvents needs no changes - it
+  // already no-ops on missing save/edit-as-yaml buttons.
+  function renderAnniversaryDetailsBody(editing, editingId, confirmDelete, dateFormat) {
+    return css`
+      <div class="bd-form">
+        ${renderDetailsBody(editing, dateFormat)}
+        ${
+          confirmDelete
+            ? css`
+              <div class="bd-confirm">
+                <span>${t("confirm_delete_question")}</span>
+                <div class="bd-actions">
+                  <button class="bd-btn danger" data-action="delete-confirm" data-id="${editingId}">${t("action_delete_confirm")}</button>
+                  <button class="bd-btn secondary" data-action="delete-cancel">${t("action_cancel")}</button>
+                </div>
+              </div>
+            `
+            : css`
+              <div class="bd-actions">
+                <button class="bd-btn secondary" data-action="cancel">${t("action_cancel")}</button>
+                <button class="bd-btn danger" data-action="delete" data-id="${editingId}">${t("action_delete")}</button>
               </div>
             `
         }
@@ -1533,11 +1602,11 @@
       );
     }
 
-    const marriedCheckbox = root.querySelector("#f-married");
+    const relationshipTypeSelect = root.querySelector("#f-relationship-type");
     const confirmMarriageBtn = root.querySelector('[data-action="confirm-marriage"]');
-    if (marriedCheckbox && confirmMarriageBtn) {
-      marriedCheckbox.addEventListener("change", () => {
-        confirmMarriageBtn.textContent = t(marriedCheckbox.checked ? "action_confirm_marriage" : "action_confirm_partnership");
+    if (relationshipTypeSelect && confirmMarriageBtn) {
+      relationshipTypeSelect.addEventListener("change", () => {
+        confirmMarriageBtn.textContent = t(relationshipTypeSelect.value === "married" ? "action_confirm_marriage" : "action_confirm_partnership");
       });
     }
     if (confirmMarriageBtn)
@@ -1567,10 +1636,10 @@
             return;
           }
         }
-        const married = root.querySelector("#f-married") ? root.querySelector("#f-married").checked : true;
+        const relationshipType = relationshipTypeSelect ? relationshipTypeSelect.value : "married";
         const marriageDate = root.querySelector("#f-marriage-date").value;
         const doLink = async () => {
-          const payload = { event_id: ctx.editingId, spouse_id: spouseId, married };
+          const payload = { event_id: ctx.editingId, spouse_id: spouseId, relationship_type: relationshipType };
           if (marriageDate) payload.marriage_date = marriageDate;
           await callService(ctx.hass, "link_marriage", payload);
           ctx.onRefresh();
@@ -1613,7 +1682,7 @@
           event_id: ctx.editingId,
           spouse_id: addMarriageDateBtn.dataset.spouseId,
           marriage_date: newDate,
-          married: addMarriageDateBtn.dataset.married !== "false",
+          relationship_type: addMarriageDateBtn.dataset.relationshipType || "married",
         });
         ctx.onRefresh();
       });
@@ -1625,7 +1694,7 @@
         // renderEventFormBody's confirmDelete branch) - not the browser's
         // native confirm(). DOM-only swap of just this button, not a
         // re-render, for the same reason add-attr/edit-as-yaml are DOM-only.
-        const married = startDivorceBtn.dataset.married !== "false";
+        const married = startDivorceBtn.dataset.relationshipType === "married";
         startDivorceBtn.outerHTML = css`
           <div class="bd-confirm">
             <span>${t(married ? "confirm_divorce_question" : "confirm_end_partnership_question")}</span>
@@ -1715,6 +1784,16 @@
       <ha-icon icon="${detailsEvent.icon || EVENT_TYPE_ICONS[detailsEvent.eventType]}"></ha-icon>
       <span>${escapeAttr(detailsEvent.name)}</span>
     `;
+    // A couple's-anniversary entity has no separate "edit" mode - its own
+    // view already includes a delete action, so no "Bewerken" escape
+    // hatch into a full editable date field exists here either (mirrors
+    // the same restriction in the Manage card's popup - see
+    // renderAnniversaryDetailsBody for why: editing the date directly
+    // would desync it from the two partners' own marriage_date).
+    if (detailsEvent.isCoupleAnniversary) {
+      const body = renderAnniversaryDetailsBody(detailsEvent, editingId, confirmDelete, dateFormat);
+      return modalWrap(title, body, "cancel");
+    }
     const body = formMode
       ? renderEventFormBody(detailsEvent, editingId, confirmDelete, hass)
       : css`
@@ -1726,19 +1805,25 @@
     return modalWrap(title, body, formMode ? "cancel" : "close-details");
   }
 
-  // ctx: hass, detailsId, formMode, onStartEdit(), onClose(),
-  // onSave(result), onCancelEdit(), onDeleteRequest(), onDeleteCancel(),
-  // onDeleteConfirm(), onRefresh()
+  // ctx: hass, detailsId, formMode, isCoupleAnniversary, onStartEdit(),
+  // onClose(), onSave(result), onCancelEdit(), onDeleteRequest(),
+  // onDeleteCancel(), onDeleteConfirm(), onRefresh()
   function bindDetailsOrEditModal(root, ctx) {
     root.querySelectorAll('[data-action="close-details"]').forEach((btn) => btn.addEventListener("click", ctx.onClose));
     const startEditBtn = root.querySelector('[data-action="start-edit"]');
     if (startEditBtn) startEditBtn.addEventListener("click", ctx.onStartEdit);
-    if (ctx.formMode) {
+    // A couple's-anniversary entity's read-only view already includes
+    // cancel/delete actions (see renderAnniversaryDetailsBody) with no
+    // separate formMode at all - bind the same handlers regardless.
+    if (ctx.formMode || ctx.isCoupleAnniversary) {
       bindEventFormEvents(root, {
         hass: ctx.hass,
         editingId: ctx.detailsId,
         onSave: ctx.onSave,
-        onCancel: ctx.onCancelEdit,
+        // A couple's-anniversary popup has no read-only view to fall back
+        // to (unlike a normal person's "exit edit mode") - cancel/✕ must
+        // fully close it, same as onClose, not just flip formMode off.
+        onCancel: ctx.isCoupleAnniversary ? ctx.onClose : ctx.onCancelEdit,
         onDeleteRequest: ctx.onDeleteRequest,
         onDeleteCancel: ctx.onDeleteCancel,
         onDeleteConfirm: ctx.onDeleteConfirm,
@@ -2232,7 +2317,7 @@
               // person's own age_at_next_birthday is still present on
               // those (see expandOccasions), but isn't relevant to either.
               const becomesText =
-                !e.isDeathAnniversary && !e.isMarriageAnniversary && e.eventType !== "deceased" && e.age != null
+                !e.isDeathAnniversary && !e.isCoupleAnniversary && e.eventType !== "deceased" && e.age != null
                   ? ` &middot; ${t("inline_becomes", { age: e.age, weekday: weekdayName(nextOccurrenceDate(e.date)) })}`
                   : "";
               // Only the death-anniversary occasion (see expandOccasions)
@@ -2243,11 +2328,15 @@
                 e.isDeathAnniversary && e.yearsSinceDeath != null
                   ? ` &middot; ${t("deceased_years_ago_short", { years: e.yearsSinceDeath })}`
                   : "";
-              const nickname =
-                e.isMarriageAnniversary && e.married ? marriageAnniversaryNickname(e.yearsAtNextMarriageAnniversary) : null;
+              // e.age is the generic "years at next occurrence" the couple's
+              // real anniversary entity already gets for free (see
+              // getEvents()/isCoupleAnniversary) - not a marriage-specific
+              // attribute.
+              const isMarried = e.relationshipType === "married";
+              const nickname = e.isCoupleAnniversary && isMarried ? marriageAnniversaryNickname(e.age) : null;
               const marriageText =
-                e.isMarriageAnniversary && e.yearsAtNextMarriageAnniversary != null
-                  ? ` &middot; ${t(e.married ? "marriage_anniversary_inline" : "partnership_anniversary_inline", { years: e.yearsAtNextMarriageAnniversary })}${nickname ? ` (${nickname})` : ""}`
+                e.isCoupleAnniversary && e.age != null
+                  ? ` &middot; ${t(isMarried ? "marriage_anniversary_inline" : "partnership_anniversary_inline", { years: e.age })}${nickname ? ` (${nickname})` : ""}`
                   : "";
               return css`
               <div class="bd-row" data-action="details" data-id="${e.entity_id.split(".")[1]}">
@@ -2301,6 +2390,7 @@
         hass: this._hass,
         detailsId: this._detailsId,
         formMode: this._formMode,
+        isCoupleAnniversary: !!(detailsEvent && detailsEvent.isCoupleAnniversary),
         onStartEdit: () => {
           this._formMode = true;
           this._render();
@@ -2525,10 +2615,10 @@
                   <td>${e.name}</td>
                   <td><span class="bd-type-badge">${eventTypeLabel(e.eventType)}</span></td>
                   <td>${
-                    e.isMarriageAnniversary
-                      ? e.yearsAtNextMarriageAnniversary != null
-                        ? (e.married && marriageAnniversaryNickname(e.yearsAtNextMarriageAnniversary)) ||
-                          t(e.married ? "marriage_anniversary_years_short" : "partnership_anniversary_years_short", { years: e.yearsAtNextMarriageAnniversary })
+                    e.isCoupleAnniversary
+                      ? e.age != null
+                        ? (e.relationshipType === "married" && marriageAnniversaryNickname(e.age)) ||
+                          t(e.relationshipType === "married" ? "marriage_anniversary_years_short" : "partnership_anniversary_years_short", { years: e.age })
                         : ""
                       : e.isDeathAnniversary
                         ? e.yearsSinceDeath != null
@@ -2584,6 +2674,7 @@
         hass: this._hass,
         detailsId: this._detailsId,
         formMode: this._formMode,
+        isCoupleAnniversary: !!(detailsEvent && detailsEvent.isCoupleAnniversary),
         onStartEdit: () => {
           this._formMode = true;
           this._render();
@@ -2776,7 +2867,11 @@
     // attributes with nothing missing are left out rather than shown as
     // "0 ontbrekend".
     _fixedAttrMissingCounts() {
-      const events = this._baseEvents();
+      // Couple's-anniversary entities (see isCoupleAnniversary) never go
+      // through _check_required_attributes - excluding them here avoids a
+      // spurious "geslacht: 1 ontbrekend" nudge for an entity that was
+      // never supposed to have one.
+      const events = this._baseEvents().filter((e) => !e.isCoupleAnniversary);
       return fixedAttrsCache
         .map((fa) => ({ key: fa.key, count: events.filter((e) => !e.attributes[fa.key]).length }))
         .filter((m) => m.count > 0);
@@ -2895,7 +2990,10 @@
 
       const editing = this._editingId ? this._baseEvents().find((e) => e.entity_id === `${DOMAIN}.${this._editingId}`) : null;
 
-      const formBody = renderEventFormBody(editing, this._editingId, this._confirmDelete, this._hass);
+      const formBody =
+        editing && editing.isCoupleAnniversary
+          ? renderAnniversaryDetailsBody(editing, this._editingId, this._confirmDelete, this._config.date_format)
+          : renderEventFormBody(editing, this._editingId, this._confirmDelete, this._hass);
 
       const importExportBody = css`
         <div class="bd-form">

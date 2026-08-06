@@ -206,40 +206,94 @@ def test_csv_export_import_roundtrip_keeps_time():
     assert parsed[0].time == "14:37"
 
 
-def test_married_defaults_to_true():
+def test_relationship_type_defaults_to_married():
     event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22))
-    assert event.married is True
+    assert event.relationship_type == "married"
 
 
-def test_married_false_roundtrips_through_storage():
-    event = Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", married=False)
+def test_relationship_type_relationship_roundtrips_through_storage():
+    event = Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", relationship_type="relationship")
     restored = Event.from_storage_dict(event.to_storage_dict())
-    assert restored.married is False
+    assert restored.relationship_type == "relationship"
 
 
-def test_pre_feature_stored_event_without_married_key_defaults_to_true():
-    """A record saved before `married` existed must still load as married=True."""
+def test_relationship_type_registered_partnership_roundtrips_through_storage():
+    event = Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", relationship_type="registered_partnership")
+    restored = Event.from_storage_dict(event.to_storage_dict())
+    assert restored.relationship_type == "registered_partnership"
+
+
+def test_legacy_married_true_migrates_to_relationship_type_married():
+    """A record saved before relationship_type existed (married: True) must
+    still load correctly - the boolean's only prior value that meant an
+    actual marriage."""
     raw = Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole").to_storage_dict()
-    del raw["married"]
+    del raw["relationship_type"]
+    raw["married"] = True
     restored = Event.from_storage_dict(raw)
-    assert restored.married is True
+    assert restored.relationship_type == "married"
 
 
-def test_csv_export_import_roundtrip_keeps_married_false():
+def test_legacy_married_false_migrates_to_relationship_type_relationship():
+    """A legacy married: False record predates the 3-way enum, so it can
+    only unambiguously map to the informal "relationship" type - not
+    registered_partnership, which didn't exist as a concept yet."""
+    raw = Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole").to_storage_dict()
+    del raw["relationship_type"]
+    raw["married"] = False
+    restored = Event.from_storage_dict(raw)
+    assert restored.relationship_type == "relationship"
+
+
+def test_legacy_married_string_false_migrates_correctly():
     """Regression test: bool("False") is True in Python - a naive coercion
-    on the CSV read-back path would silently flip every unmarried partner
-    back to "married" on export/import."""
-    events = [Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", married=False)]
-    content = export_events(events, "csv")
-    parsed = parse_events(content, "csv")
-    assert parsed[0].married is False
+    on the CSV-round-tripped legacy `married` column would silently flip
+    every already-unmarried partner back to "married" on the next
+    export/import, or on this migration path specifically."""
+    raw = Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole").to_storage_dict()
+    del raw["relationship_type"]
+    raw["married"] = "False"
+    restored = Event.from_storage_dict(raw)
+    assert restored.relationship_type == "relationship"
 
 
-def test_csv_export_import_roundtrip_keeps_married_true():
-    events = [Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", married=True)]
+def test_no_relationship_type_or_legacy_married_key_defaults_to_married():
+    raw = Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole").to_storage_dict()
+    del raw["relationship_type"]
+    restored = Event.from_storage_dict(raw)
+    assert restored.relationship_type == "married"
+
+
+def test_csv_export_import_roundtrip_keeps_relationship_type_relationship():
+    events = [Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", relationship_type="relationship")]
     content = export_events(events, "csv")
     parsed = parse_events(content, "csv")
-    assert parsed[0].married is True
+    assert parsed[0].relationship_type == "relationship"
+
+
+def test_csv_export_import_roundtrip_keeps_relationship_type_married():
+    events = [Event.create(name="Cees", date_=date(1980, 1, 1), spouse_id="nicole", relationship_type="married")]
+    content = export_events(events, "csv")
+    parsed = parse_events(content, "csv")
+    assert parsed[0].relationship_type == "married"
+
+
+def test_partner_ids_defaults_to_empty_list():
+    event = Event.create(name="Frodo Baggins", date_=date(1921, 9, 22))
+    assert event.partner_ids == []
+
+
+def test_partner_ids_roundtrips_through_storage():
+    event = Event.create(name="Anniversary", date_=date(2012, 2, 14), partner_ids=["cees", "nicole"])
+    restored = Event.from_storage_dict(event.to_storage_dict())
+    assert restored.partner_ids == ["cees", "nicole"]
+
+
+def test_csv_export_import_roundtrip_keeps_partner_ids():
+    events = [Event.create(name="Anniversary", date_=date(2012, 2, 14), partner_ids=["cees", "nicole"])]
+    content = export_events(events, "csv")
+    parsed = parse_events(content, "csv")
+    assert parsed[0].partner_ids == ["cees", "nicole"]
 
 
 def test_parent_ids_defaults_to_empty_list():

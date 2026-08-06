@@ -56,6 +56,7 @@ def export_events(events: list[Event], fmt: str) -> str:
             row = event.to_storage_dict()
             row["attributes"] = json.dumps(row["attributes"], ensure_ascii=False)
             row["parent_ids"] = json.dumps(row["parent_ids"], ensure_ascii=False)
+            row["partner_ids"] = json.dumps(row["partner_ids"], ensure_ascii=False)
             writer.writerow(row)
         return buffer.getvalue()
 
@@ -82,6 +83,22 @@ def parse_events(content: str, fmt: str) -> list[Event]:
                 parent_ids = json.loads(parent_ids)
             except json.JSONDecodeError:
                 parent_ids = []
+            partner_ids = row.get("partner_ids") or "[]"
+            try:
+                partner_ids = json.loads(partner_ids)
+            except json.JSONDecodeError:
+                partner_ids = []
+            # Only include a relationship-type key at all when the CSV
+            # actually has a non-empty value for it - Event.from_storage_dict
+            # (via _coerce_relationship_type) needs to distinguish "no
+            # column in this export" (falls through to the legacy `married`
+            # column, then to the default) from "column present but blank",
+            # which a fixed `row.get(...)` literal here would collapse.
+            relationship_fields = {}
+            if row.get("relationship_type"):
+                relationship_fields["relationship_type"] = row["relationship_type"]
+            elif row.get("married"):
+                relationship_fields["married"] = row["married"]
             events.append(
                 _coerce_row(
                     {
@@ -95,8 +112,9 @@ def parse_events(content: str, fmt: str) -> list[Event]:
                         "time": row.get("time") or None,
                         "spouse_id": row.get("spouse_id") or None,
                         "marriage_date": row.get("marriage_date") or None,
-                        "married": row.get("married"),
+                        **relationship_fields,
                         "parent_ids": parent_ids,
+                        "partner_ids": partner_ids,
                         "attributes": attributes,
                     }
                 )

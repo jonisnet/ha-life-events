@@ -40,12 +40,20 @@ CONF_TIME = "time"
 # directly through add_event/update_event.
 CONF_SPOUSE_ID = "spouse_id"
 CONF_MARRIAGE_DATE = "marriage_date"
-# Whether the spouse_id/marriage_date link represents an actual wedding
-# (default, and the only case that existed before this field was added -
-# so every pre-existing linked record is genuinely married, zero migration
-# needed) or an unmarried partnership "since" marriage_date. Same
+# What kind of link spouse_id/marriage_date represents. Default is
+# "married" - the only case that existed before this field was added, so
+# every pre-existing linked record migrates cleanly (see
+# Event.from_storage_dict's legacy-`married`-boolean fallback). Same
 # set/cleared-only-via-link/unlink-marriage rule as the two fields above.
-CONF_MARRIED = "married"
+CONF_RELATIONSHIP_TYPE = "relationship_type"
+RELATIONSHIP_TYPE_MARRIED = "married"
+RELATIONSHIP_TYPE_REGISTERED_PARTNERSHIP = "registered_partnership"
+RELATIONSHIP_TYPE_RELATIONSHIP = "relationship"
+RELATIONSHIP_TYPES = [
+    RELATIONSHIP_TYPE_MARRIED,
+    RELATIONSHIP_TYPE_REGISTERED_PARTNERSHIP,
+    RELATIONSHIP_TYPE_RELATIONSHIP,
+]
 # A child's 0-2 parents, by event id - stored only on the child's own
 # record (deliberately NOT mirrored as e.g. children_ids on the parent's
 # record - "children of X" is computed on read by scanning for whoever has
@@ -55,6 +63,13 @@ CONF_MARRIED = "married"
 # _validate_parent_ids for why this one doesn't need its own link/unlink
 # service (no second record to keep in sync).
 CONF_PARENT_IDS = "parent_ids"
+# The two event ids a couple's auto-created anniversary Event is between -
+# only ever set on that kind of Event (event_type=EVENT_TYPE_ANNIVERSARY,
+# created/updated by LifeEventsManager._upsert_anniversary_entity, never
+# through add_event/update_event). Doubles as the marker distinguishing an
+# auto-created couple's-anniversary entity from an ordinary/legacy-imported
+# standalone anniversary Event, which has no partner_ids at all.
+CONF_PARTNER_IDS = "partner_ids"
 
 # Legacy YAML fields (kept so existing configuration.yaml keeps validating during import)
 CONF_UNIQUE_ID = "unique_id"
@@ -126,7 +141,8 @@ CSV_FIELDNAMES = [
     CONF_PHONE_NUMBER,
     CONF_SPOUSE_ID,
     CONF_MARRIAGE_DATE,
-    CONF_MARRIED,
+    CONF_RELATIONSHIP_TYPE,
     CONF_PARENT_IDS,
+    CONF_PARTNER_IDS,
     CONF_ATTRIBUTES,
 ]

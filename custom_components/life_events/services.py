@@ -16,6 +16,8 @@ from .const import (
     FORMAT_JSON,
     IMPORT_MODE_MERGE,
     IMPORT_MODE_REPLACE,
+    RELATIONSHIP_TYPE_MARRIED,
+    RELATIONSHIP_TYPES,
     SERVICE_ADD_EVENT,
     SERVICE_DELETE_EVENT,
     SERVICE_EXPORT_EVENTS,
@@ -89,7 +91,7 @@ LINK_MARRIAGE_SCHEMA = vol.Schema(
         # link can still be recorded, just without an anniversary occasion
         # until the date is filled in later via a plain update.
         vol.Optional("marriage_date"): cv.date,
-        vol.Optional("married", default=True): cv.boolean,
+        vol.Optional("relationship_type", default=RELATIONSHIP_TYPE_MARRIED): vol.In(RELATIONSHIP_TYPES),
     }
 )
 
@@ -148,7 +150,7 @@ def async_register_services(hass: HomeAssistant) -> None:
     async def _link_marriage(call: ServiceCall) -> None:
         manager = _manager_for_call(hass, call)
         await manager.async_link_marriage(
-            call.data["event_id"], call.data["spouse_id"], call.data.get("marriage_date"), call.data["married"]
+            call.data["event_id"], call.data["spouse_id"], call.data.get("marriage_date"), call.data["relationship_type"]
         )
 
     async def _unlink_marriage(call: ServiceCall) -> None:

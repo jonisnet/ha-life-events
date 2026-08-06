@@ -109,7 +109,6 @@
   "action_end_partnership_confirm": "Ja, beëindigen",
   "partnership_anniversary_inline": "{years} jaar samen",
   "partnership_anniversary_years_short": "{years} jaar samen",
-  "field_married_checkbox": "Dit is een huwelijk (niet alleen een partnerschap)",
   "action_confirm_partnership": "Bevestig partnerschap",
   "action_add_marriage_date": "Datum toevoegen",
   "confirm_no_marriage_date_question": "Weet je zeker dat de datum (nog) niet bekend is?",
@@ -152,5 +151,12 @@
   "marriage_date_label": "Trouwdatum",
   "editor_date_format": "Datumnotatie",
   "yaml_edit_hint": "Technische veldnamen (Engels), niet vertaald - net als YAML-bewerken elders in Home Assistant.",
-  "children_section_title": "Kinderen"
+  "children_section_title": "Kinderen",
+  "relationship_type_field_label": "Soort relatie",
+  "relationship_type_option_married": "Getrouwd",
+  "relationship_type_option_registered_partnership": "Geregistreerd partnerschap",
+  "relationship_type_option_relationship": "Relatie",
+  "registered_partnership_section_title": "Geregistreerd partnerschap",
+  "label_partner_of_bare": "Partner van {name}",
+  "label_anniversary_nickname": "Mijlpaal"
 }

@@ -54,6 +54,12 @@ async def test_link_marriage_sets_symmetric_attributes(hass: HomeAssistant) -> N
     assert nicole.attributes["spouse_id"] == "cees"
     assert nicole.attributes["spouse_name"] == "Cees"
     assert nicole.attributes["marriage_date"] == "2012-02-14"
+    # A date-known link also creates a real, independent anniversary entity.
+    anniversary = hass.states.get("life_events.cees_nicole_anniversary")
+    assert anniversary is not None
+    assert anniversary.attributes["event_type"] == "anniversary"
+    assert set(anniversary.attributes["partner_ids"]) == {"cees", "nicole"}
+    assert anniversary.attributes["relationship_type"] == "married"
 
 
 async def test_unmarried_event_has_no_marriage_attributes(hass: HomeAssistant) -> None:
@@ -81,6 +87,7 @@ async def test_unlink_marriage_clears_both_sides(hass: HomeAssistant) -> None:
     nicole = hass.states.get("life_events.nicole")
     assert "spouse_id" not in cees.attributes
     assert "spouse_id" not in nicole.attributes
+    assert hass.states.get("life_events.cees_nicole_anniversary") is None
 
 
 async def test_remarriage_while_old_spouse_still_alive_unlinks_them(hass: HomeAssistant) -> None:
@@ -197,7 +204,7 @@ async def test_link_marriage_rejects_marrying_self(hass: HomeAssistant) -> None:
         )
 
 
-async def test_link_marriage_with_married_false_sets_it_symmetrically(hass: HomeAssistant) -> None:
+async def test_link_marriage_with_relationship_type_relationship_sets_it_symmetrically(hass: HomeAssistant) -> None:
     await _setup_entry(hass)
     await _add_person(hass, "Cees", "1980-01-01")
     await _add_person(hass, "Nicole", "1982-05-05")
@@ -205,18 +212,42 @@ async def test_link_marriage_with_married_false_sets_it_symmetrically(hass: Home
     await hass.services.async_call(
         DOMAIN,
         "link_marriage",
-        {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14", "married": False},
+        {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14", "relationship_type": "relationship"},
         blocking=True,
     )
     await hass.async_block_till_done()
 
     cees = hass.states.get("life_events.cees")
     nicole = hass.states.get("life_events.nicole")
-    assert cees.attributes["married"] is False
-    assert nicole.attributes["married"] is False
+    assert cees.attributes["relationship_type"] == "relationship"
+    assert nicole.attributes["relationship_type"] == "relationship"
+    anniversary = hass.states.get("life_events.cees_nicole_anniversary")
+    assert anniversary.attributes["relationship_type"] == "relationship"
 
 
-async def test_link_marriage_defaults_married_to_true_when_omitted(hass: HomeAssistant) -> None:
+async def test_link_marriage_with_relationship_type_registered_partnership(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+
+    await hass.services.async_call(
+        DOMAIN,
+        "link_marriage",
+        {
+            "event_id": "cees",
+            "spouse_id": "nicole",
+            "marriage_date": "2012-02-14",
+            "relationship_type": "registered_partnership",
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    cees = hass.states.get("life_events.cees")
+    assert cees.attributes["relationship_type"] == "registered_partnership"
+
+
+async def test_link_marriage_defaults_relationship_type_to_married_when_omitted(hass: HomeAssistant) -> None:
     await _setup_entry(hass)
     await _add_person(hass, "Cees", "1980-01-01")
     await _add_person(hass, "Nicole", "1982-05-05")
@@ -227,17 +258,17 @@ async def test_link_marriage_defaults_married_to_true_when_omitted(hass: HomeAss
     await hass.async_block_till_done()
 
     cees = hass.states.get("life_events.cees")
-    assert cees.attributes["married"] is True
+    assert cees.attributes["relationship_type"] == "married"
 
 
-async def test_updating_an_unrelated_field_does_not_change_married(hass: HomeAssistant) -> None:
+async def test_updating_an_unrelated_field_does_not_change_relationship_type(hass: HomeAssistant) -> None:
     await _setup_entry(hass)
     await _add_person(hass, "Cees", "1980-01-01")
     await _add_person(hass, "Nicole", "1982-05-05")
     await hass.services.async_call(
         DOMAIN,
         "link_marriage",
-        {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14", "married": False},
+        {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14", "relationship_type": "relationship"},
         blocking=True,
     )
     await hass.async_block_till_done()
@@ -246,7 +277,7 @@ async def test_updating_an_unrelated_field_does_not_change_married(hass: HomeAss
     await hass.async_block_till_done()
 
     cees = hass.states.get("life_events.cees")
-    assert cees.attributes["married"] is False
+    assert cees.attributes["relationship_type"] == "relationship"
 
 
 async def test_link_marriage_without_a_date_omits_marriage_date_but_keeps_spouse_id(hass: HomeAssistant) -> None:
@@ -263,12 +294,14 @@ async def test_link_marriage_without_a_date_omits_marriage_date_but_keeps_spouse
     cees = hass.states.get("life_events.cees")
     nicole = hass.states.get("life_events.nicole")
     assert cees.attributes["spouse_id"] == "nicole"
-    assert cees.attributes["married"] is True
+    assert cees.attributes["relationship_type"] == "married"
     assert "marriage_date" not in cees.attributes
     assert "days_until_marriage_anniversary" not in cees.attributes
     assert "years_at_next_marriage_anniversary" not in cees.attributes
     assert nicole.attributes["spouse_id"] == "cees"
     assert "marriage_date" not in nicole.attributes
+    # No date known yet - no anniversary entity should exist for this pair.
+    assert hass.states.get("life_events.cees_nicole_anniversary") is None
 
 
 async def test_relinking_the_same_pair_fills_in_a_previously_unknown_date(hass: HomeAssistant) -> None:
@@ -279,14 +312,15 @@ async def test_relinking_the_same_pair_fills_in_a_previously_unknown_date(hass: 
     await _add_person(hass, "Cees", "1980-01-01")
     await _add_person(hass, "Nicole", "1982-05-05")
     await hass.services.async_call(
-        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "married": False}, blocking=True
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "relationship_type": "relationship"}, blocking=True
     )
     await hass.async_block_till_done()
+    assert hass.states.get("life_events.cees_nicole_anniversary") is None
 
     await hass.services.async_call(
         DOMAIN,
         "link_marriage",
-        {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "1999-09-09", "married": False},
+        {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "1999-09-09", "relationship_type": "relationship"},
         blocking=True,
     )
     await hass.async_block_till_done()
@@ -294,5 +328,142 @@ async def test_relinking_the_same_pair_fills_in_a_previously_unknown_date(hass: 
     cees = hass.states.get("life_events.cees")
     nicole = hass.states.get("life_events.nicole")
     assert cees.attributes["marriage_date"] == "1999-09-09"
-    assert cees.attributes["married"] is False
+    assert cees.attributes["relationship_type"] == "relationship"
     assert nicole.attributes["marriage_date"] == "1999-09-09"
+    # Filling in the date creates exactly one anniversary entity, not two.
+    anniversary = hass.states.get("life_events.cees_nicole_anniversary")
+    assert anniversary is not None
+    assert anniversary.attributes["relationship_type"] == "relationship"
+
+
+async def test_link_marriage_with_date_creates_anniversary_entity(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    anniversary = hass.states.get("life_events.cees_nicole_anniversary")
+    assert anniversary is not None
+    assert anniversary.attributes["event_type"] == "anniversary"
+    assert anniversary.attributes["date_of_birth"] == "2012-02-14"
+    # A real countdown, from the generic Event/EventEntity machinery - no
+    # marriage-specific computation needed on this entity at all.
+    assert 0 <= int(anniversary.state) <= 366
+    assert anniversary.attributes["unit_of_measurement"] in ("day", "days")
+
+
+async def test_relinking_same_pair_with_new_date_upserts_not_duplicates(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2013-03-03"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    anniversary = hass.states.get("life_events.cees_nicole_anniversary")
+    assert anniversary is not None
+    assert anniversary.attributes["date_of_birth"] == "2013-03-03"
+    # Still exactly one - update in place, not a second entity.
+    all_anniversary_entities = [eid for eid in hass.states.async_entity_ids("life_events") if "anniversary" in eid]
+    assert len(all_anniversary_entities) == 1
+
+
+async def test_deleting_a_partner_deletes_the_anniversary_entity(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14"}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get("life_events.cees_nicole_anniversary") is not None
+
+    await hass.services.async_call(DOMAIN, "delete_event", {"event_id": "cees"}, blocking=True)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("life_events.cees_nicole_anniversary") is None
+
+
+async def test_remarriage_to_someone_else_deletes_old_and_creates_new_anniversary_entity(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+    await _add_person(hass, "Marlene", "1985-03-03")
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2005-06-01"}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get("life_events.cees_nicole_anniversary") is not None
+
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "marlene", "marriage_date": "2020-09-09"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert hass.states.get("life_events.cees_nicole_anniversary") is None
+    assert hass.states.get("life_events.cees_marlene_anniversary") is not None
+
+
+async def test_remarriage_after_widowhood_deletes_old_anniversary_entity_too(hass: HomeAssistant) -> None:
+    """The deceased ex-spouse's OWN record stays factually intact (existing
+    behavior), but the independent anniversary entity for that old pairing
+    does not persist - it's a real HA entity representing a relationship
+    that, from Cees's side, has moved on."""
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+    await _add_person(hass, "Marlene", "1985-03-03")
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2005-06-01"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        DOMAIN,
+        "update_event",
+        {"event_id": "nicole", "event_type": "deceased", "date_of_death": "2024-01-01"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "marlene", "marriage_date": "2025-05-05"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    nicole = hass.states.get("life_events.nicole")
+    assert nicole.attributes["spouse_id"] == "cees"
+    assert nicole.attributes["marriage_date"] == "2005-06-01"
+    assert hass.states.get("life_events.cees_nicole_anniversary") is None
+    assert hass.states.get("life_events.cees_marlene_anniversary") is not None
+
+
+async def test_deleting_the_anniversary_entity_directly_unlinks_both_partners(hass: HomeAssistant) -> None:
+    await _setup_entry(hass)
+    await _add_person(hass, "Cees", "1980-01-01")
+    await _add_person(hass, "Nicole", "1982-05-05")
+    await hass.services.async_call(
+        DOMAIN, "link_marriage", {"event_id": "cees", "spouse_id": "nicole", "marriage_date": "2012-02-14"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        DOMAIN, "delete_event", {"event_id": "cees_nicole_anniversary"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert hass.states.get("life_events.cees_nicole_anniversary") is None
+    cees = hass.states.get("life_events.cees")
+    nicole = hass.states.get("life_events.nicole")
+    assert "spouse_id" not in cees.attributes
+    assert "spouse_id" not in nicole.attributes

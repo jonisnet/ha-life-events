@@ -139,7 +139,6 @@
   "action_end_partnership_confirm": "Ja, beenden",
   "partnership_anniversary_inline": "{years} Jahre zusammen",
   "partnership_anniversary_years_short": "{years} Jahre zusammen",
-  "field_married_checkbox": "Dies ist eine Ehe (nicht nur eine Partnerschaft)",
   "action_confirm_partnership": "Partnerschaft bestätigen",
   "action_add_marriage_date": "Datum hinzufügen",
   "confirm_no_marriage_date_question": "Bist du sicher, dass das Datum (noch) nicht bekannt ist?",
@@ -152,5 +151,12 @@
   "new_parent_firstname_label": "Vorname des neuen Elternteils",
   "new_parent_lastname_label": "Nachname des neuen Elternteils (optional)",
   "new_parent_birthdate_label": "Geburtsdatum des neuen Elternteils",
-  "children_section_title": "Kinder"
+  "children_section_title": "Kinder",
+  "relationship_type_field_label": "Art der Beziehung",
+  "relationship_type_option_married": "Verheiratet",
+  "relationship_type_option_registered_partnership": "Eingetragene Partnerschaft",
+  "relationship_type_option_relationship": "Beziehung",
+  "registered_partnership_section_title": "Eingetragene Partnerschaft",
+  "label_partner_of_bare": "Partner von {name}",
+  "label_anniversary_nickname": "Meilenstein"
 }

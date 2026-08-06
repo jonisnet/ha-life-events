@@ -4,6 +4,34 @@ All notable changes to Life Events are documented here. Development happens
 in beta releases (`0.0.x-beta.N`) between occasional real releases, where
 this file is consolidated into one summary per real version.
 
+## 0.0.4-beta.4
+
+### Added
+- **Multiple relationship types**: "Getrouwd" is now one of three choices -
+  Getrouwd (married), Geregistreerd partnerschap (registered partnership),
+  or Relatie (relationship) - replacing the earlier married/not-married
+  checkbox with a proper 3-way picker. An informal "Relatie" link with no
+  known date now shows no date-related text at all (not even "datum
+  onbekend"), since a precise start date usually isn't the point for that
+  kind of relationship.
+- **A couple's anniversary is now a real, independent entity**, not just a
+  computed row shown inside the cards. Linking two people with a known
+  date creates a genuine `life_events.*` entity for their anniversary -
+  visible under Settings → Entities, usable in automations, with its own
+  working countdown. It's kept in sync automatically (created when a date
+  becomes known, updated when the date changes, removed on unlinking or
+  when either partner is removed) and is read-only/delete-only in the
+  cards, since editing its date directly would desync it from the two
+  partners' own records.
+
+### Changed
+- **If a card's `event_types` config is set to something like `[birthday]`
+  (hiding anniversaries), a linked couple's anniversary will no longer
+  show up on it** - previously it always appeared regardless of that
+  filter, since it wasn't a real, independently-typed entity yet. Add
+  `anniversary` to a card's `event_types` list if you want couples'
+  anniversaries to keep showing there.
+
 ## 0.0.4-beta.3
 
 ### Added

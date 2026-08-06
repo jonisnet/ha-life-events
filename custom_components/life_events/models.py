@@ -15,15 +15,25 @@ from .const import (
     CONF_ICON,
     CONF_ID,
     CONF_MARRIAGE_DATE,
-    CONF_MARRIED,
     CONF_NAME,
     CONF_PARENT_IDS,
+    CONF_PARTNER_IDS,
     CONF_PHONE_NUMBER,
+    CONF_RELATIONSHIP_TYPE,
     CONF_SPOUSE_ID,
     CONF_TIME,
     DEFAULT_ICONS,
     EVENT_TYPE_BIRTHDAY,
+    RELATIONSHIP_TYPE_MARRIED,
+    RELATIONSHIP_TYPE_RELATIONSHIP,
+    RELATIONSHIP_TYPES,
 )
+
+# The pre-relationship_type storage key ("married": bool) - kept only as a
+# string literal here, not re-exported from const.py, so
+# Event.from_storage_dict can still migrate a record saved before this field
+# existed (see there). Not a real field name going forward.
+_LEGACY_CONF_MARRIED = "married"
 
 
 def _coerce_bool(value, default: bool) -> bool:
@@ -39,6 +49,25 @@ def _coerce_bool(value, default: bool) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() not in ("false", "0", "no")
+
+
+def _coerce_relationship_type(raw: dict) -> str:
+    """Read relationship_type from a stored/CSV row, migrating a legacy
+    `married: bool` record (from before this field existed) so an
+    already-linked couple isn't lost on the next restart.
+
+    store.py's CSV parse path only includes the "relationship_type"/
+    "married" keys in `raw` when that CSV column actually had a non-empty
+    value for this row - so a genuinely old export correctly falls through
+    to the legacy branch below, rather than the key merely being present
+    with an empty value shadowing the fallback.
+    """
+    value = raw.get(CONF_RELATIONSHIP_TYPE)
+    if value:
+        return value if value in RELATIONSHIP_TYPES else RELATIONSHIP_TYPE_MARRIED
+    if _LEGACY_CONF_MARRIED in raw:
+        return RELATIONSHIP_TYPE_MARRIED if _coerce_bool(raw.get(_LEGACY_CONF_MARRIED), True) else RELATIONSHIP_TYPE_RELATIONSHIP
+    return RELATIONSHIP_TYPE_MARRIED
 
 
 def new_event_id(name: str, requested_id: str | None = None) -> str:
@@ -71,14 +100,19 @@ class Event:
     # services.py on purpose, so a caller can't desync one side of a link).
     spouse_id: str | None = None
     marriage_date: date | None = None
-    # Whether the link above is a marriage or an unmarried partnership -
-    # see CONF_MARRIED in const.py. Only meaningful while spouse_id is set.
-    married: bool = True
+    # What kind of link the pair above is - see CONF_RELATIONSHIP_TYPE in
+    # const.py. Only meaningful while spouse_id is set.
+    relationship_type: str = RELATIONSHIP_TYPE_MARRIED
     # A child's 0-2 parents, by event id - see CONF_PARENT_IDS in const.py.
     # Unlike spouse_id/marriage_date, this rides the normal add/update_event
     # path (validated in LifeEventsManager._validate_parent_ids), since it's
     # one-sided and has no second record to keep in sync.
     parent_ids: list[str] = field(default_factory=list)
+    # The two event ids this Event is a couple's-anniversary entity for -
+    # see CONF_PARTNER_IDS in const.py. Only ever set by
+    # LifeEventsManager._upsert_anniversary_entity, never through plain
+    # add_event/update_event.
+    partner_ids: list[str] = field(default_factory=list)
     attributes: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -98,8 +132,9 @@ class Event:
         time: str | None = None,
         spouse_id: str | None = None,
         marriage_date: date | None = None,
-        married: bool = True,
+        relationship_type: str = RELATIONSHIP_TYPE_MARRIED,
         parent_ids: list[str] | None = None,
+        partner_ids: list[str] | None = None,
         attributes: dict[str, str] | None = None,
     ) -> "Event":
         return cls(
@@ -113,8 +148,9 @@ class Event:
             time=time or None,
             spouse_id=spouse_id or None,
             marriage_date=marriage_date,
-            married=married,
+            relationship_type=relationship_type,
             parent_ids=list(parent_ids or []),
+            partner_ids=list(partner_ids or []),
             attributes=dict(attributes or {}),
         )
 
@@ -130,8 +166,9 @@ class Event:
             CONF_PHONE_NUMBER: self.phone_number,
             CONF_SPOUSE_ID: self.spouse_id,
             CONF_MARRIAGE_DATE: self.marriage_date.isoformat() if self.marriage_date else None,
-            CONF_MARRIED: self.married,
+            CONF_RELATIONSHIP_TYPE: self.relationship_type,
             CONF_PARENT_IDS: list(self.parent_ids),
+            CONF_PARTNER_IDS: list(self.partner_ids),
             CONF_ATTRIBUTES: dict(self.attributes),
         }
 
@@ -148,8 +185,9 @@ class Event:
             time=raw.get(CONF_TIME) or None,
             spouse_id=raw.get(CONF_SPOUSE_ID) or None,
             marriage_date=date.fromisoformat(raw[CONF_MARRIAGE_DATE]) if raw.get(CONF_MARRIAGE_DATE) else None,
-            married=_coerce_bool(raw.get(CONF_MARRIED), True),
+            relationship_type=_coerce_relationship_type(raw),
             parent_ids=list(raw.get(CONF_PARENT_IDS) or []),
+            partner_ids=list(raw.get(CONF_PARTNER_IDS) or []),
             attributes=dict(raw.get(CONF_ATTRIBUTES) or {}),
         )
 

@@ -23,6 +23,7 @@ from .const import (
     EVENT_TYPE_ANNIVERSARY,
     EVENT_TYPE_DECEASED,
     LEGACY_ANNIVERSARY_HINTS,
+    RELATIONSHIP_TYPE_MARRIED,
     SIGNAL_EVENTS_UPDATED,
 )
 from .entity import EventEntity
@@ -226,8 +227,9 @@ class LifeEventsManager:
             # an existing marriage link.
             "spouse_id": current.spouse_id,
             "marriage_date": current.marriage_date,
-            "married": current.married,
+            "relationship_type": current.relationship_type,
             "parent_ids": fields.get("parent_ids", current.parent_ids),
+            "partner_ids": current.partner_ids,
             "attributes": fields.get("attributes", current.attributes),
         }
         self._check_required_attributes(merged["attributes"])
@@ -246,19 +248,33 @@ class LifeEventsManager:
     async def async_delete_event(self, event_id: str) -> None:
         if event_id not in self.events:
             return
+        deleted_event = self.events[event_id]
+
+        # If this IS an auto-created couple's-anniversary entity (always
+        # has exactly 2 partner_ids), deleting it directly must
+        # symmetrically unlink both partners too - reuses only the
+        # field-clearing half (_unlink_pair_fields), not
+        # async_unlink_marriage, so it doesn't loop back into deleting
+        # this same entity again mid-deletion.
+        if len(deleted_event.partner_ids) == 2:
+            self._unlink_pair_fields(deleted_event.partner_ids[0], deleted_event.partner_ids[1])
+
         # A surviving spouse's own record must not keep pointing at a
         # spouse_id that no longer exists - clear their side of the link
         # too (their own marriage_date/spouse_id, not the deleted record,
-        # which is gone regardless).
-        spouse_id = self.events[event_id].spouse_id
+        # which is gone regardless). The couple's anniversary entity, if
+        # any, can't outlive either partner either.
+        spouse_id = deleted_event.spouse_id
         if spouse_id and spouse_id in self.events:
             spouse = self.events[spouse_id]
             spouse.spouse_id = None
             spouse.marriage_date = None
-            spouse.married = True
+            spouse.relationship_type = RELATIONSHIP_TYPE_MARRIED
             spouse_entity = self._entities.get(spouse_id)
             if spouse_entity:
                 spouse_entity.async_write_ha_state()
+        if spouse_id:
+            self._delete_anniversary_entity_for_pair(event_id, spouse_id)
         # No reverse index from parent -> children (deliberate, see
         # CONF_PARENT_IDS in const.py), so freeing a deleted parent from
         # every child that referenced it means scanning all events.
@@ -303,23 +319,107 @@ class LifeEventsManager:
         if old_spouse and old_spouse.event_type != EVENT_TYPE_DECEASED:
             old_spouse.spouse_id = None
             old_spouse.marriage_date = None
-            old_spouse.married = True
+            old_spouse.relationship_type = RELATIONSHIP_TYPE_MARRIED
             freed_id = old_spouse_id
         event.spouse_id = None
         event.marriage_date = None
-        event.married = True
+        event.relationship_type = RELATIONSHIP_TYPE_MARRIED
         return freed_id
 
+    def _unlink_pair_fields(self, id_a: str | None, id_b: str | None) -> None:
+        """Clear spouse_id/marriage_date/relationship_type on both sides.
+
+        No anniversary-entity side effects, deliberately - kept separate
+        from async_unlink_marriage so async_delete_event can reuse just
+        this field-clearing half when the anniversary entity itself is
+        what's being deleted, without looping back into deleting that same
+        entity again.
+        """
+        for eid in (id_a, id_b):
+            if not eid:
+                continue
+            person = self.events.get(eid)
+            if not person:
+                continue
+            person.spouse_id = None
+            person.marriage_date = None
+            person.relationship_type = RELATIONSHIP_TYPE_MARRIED
+            entity = self._entities.get(eid)
+            if entity:
+                entity.async_write_ha_state()
+
+    def _anniversary_pair_id(self, id_a: str, id_b: str) -> str:
+        """Deterministic id for a couple's auto-created anniversary Event.
+
+        Derived purely from the sorted pair of partner ids (never stored
+        separately), so re-linking the same pair - e.g. filling in a
+        previously-unknown date, or changing relationship_type - always
+        resolves to the same entity instead of creating a duplicate.
+        """
+        sorted_ids = sorted([id_a, id_b])
+        return new_event_id(f"{sorted_ids[0]}_{sorted_ids[1]}_anniversary")
+
+    def _upsert_anniversary_entity(
+        self, id_a: str, id_b: str, marriage_date: date | None, relationship_type: str
+    ) -> None:
+        """Create or update the real entity for a couple's anniversary.
+
+        No-op while marriage_date is unknown - consistent with "no
+        anniversary occasion until it's filled in" elsewhere. Bypasses
+        _check_required_attributes on purpose: this isn't a person, so it
+        must never be blocked by a required fixed attribute like "geslacht".
+        """
+        if marriage_date is None:
+            return
+        sorted_ids = sorted([id_a, id_b])
+        first = self.events.get(sorted_ids[0])
+        second = self.events.get(sorted_ids[1])
+        if not first or not second:
+            return
+        pair_id = self._anniversary_pair_id(id_a, id_b)
+        anniversary = Event.create(
+            name=f"{first.name} & {second.name}",
+            date_=marriage_date,
+            event_type=EVENT_TYPE_ANNIVERSARY,
+            event_id=pair_id,
+            relationship_type=relationship_type,
+            partner_ids=[id_a, id_b],
+        )
+        is_new = anniversary.id not in self.events
+        self.events[anniversary.id] = anniversary
+        if is_new:
+            new_entity = EventEntity(self, anniversary.id)
+            self._entities[anniversary.id] = new_entity
+            self._async_add_entities([new_entity])
+        else:
+            entity = self._entities.get(anniversary.id)
+            if entity:
+                entity.async_write_ha_state()
+
+    def _delete_anniversary_entity_for_pair(self, id_a: str, id_b: str) -> None:
+        """Delete the anniversary entity for this pair, if one exists.
+
+        No side effects on the partner records themselves - callers handle
+        their own field-clearing separately.
+        """
+        pair_id = self._anniversary_pair_id(id_a, id_b)
+        if pair_id not in self.events:
+            return
+        del self.events[pair_id]
+        entity = self._entities.pop(pair_id, None)
+        if entity:
+            self._purge_entity(entity)
+
     async def async_link_marriage(
-        self, event_id: str, spouse_id: str, marriage_date: date | None, married: bool = True
+        self, event_id: str, spouse_id: str, marriage_date: date | None, relationship_type: str = RELATIONSHIP_TYPE_MARRIED
     ) -> None:
         """Link two existing persons as spouses/partners, symmetrically.
 
         marriage_date may be None - the link/anniversary date isn't always
         known up front (e.g. a couple already married before this
         integration existed) - the link is still recorded, just without an
-        anniversary occasion until the date is filled in via a plain
-        update_event later.
+        anniversary occasion until the date is filled in via a re-link
+        later (marriage_date isn't editable via plain update_event).
         """
         if event_id not in self.events:
             raise ServiceValidationError(f"Unknown event id: {event_id}")
@@ -328,6 +428,14 @@ class LifeEventsManager:
         if event_id == spouse_id:
             raise ServiceValidationError("A person cannot marry themselves")
 
+        # Captured before clearing, so a stale PREVIOUS pairing's
+        # anniversary entity can be deleted below even when re-linking the
+        # SAME pair (old_a == spouse_id in that case, correctly skipped -
+        # _upsert_anniversary_entity finds and updates that same entity
+        # in place instead).
+        old_a = self.events[event_id].spouse_id
+        old_b = self.events[spouse_id].spouse_id
+
         # Defensive: normally the UI only offers unmarried candidates, but
         # a direct service call could ask to link someone already linked
         # elsewhere - unwind any existing link on either side first so the
@@ -335,12 +443,19 @@ class LifeEventsManager:
         freed_a = self._clear_stale_marriage_link(event_id)
         freed_b = self._clear_stale_marriage_link(spouse_id)
 
+        if old_a and old_a != spouse_id:
+            self._delete_anniversary_entity_for_pair(event_id, old_a)
+        if old_b and old_b != event_id:
+            self._delete_anniversary_entity_for_pair(spouse_id, old_b)
+
         self.events[event_id].spouse_id = spouse_id
         self.events[event_id].marriage_date = marriage_date
-        self.events[event_id].married = married
+        self.events[event_id].relationship_type = relationship_type
         self.events[spouse_id].spouse_id = event_id
         self.events[spouse_id].marriage_date = marriage_date
-        self.events[spouse_id].married = married
+        self.events[spouse_id].relationship_type = relationship_type
+
+        self._upsert_anniversary_entity(event_id, spouse_id, marriage_date, relationship_type)
 
         await self.store.async_save(list(self.events.values()))
         affected = {event_id, spouse_id}
@@ -355,19 +470,14 @@ class LifeEventsManager:
         async_dispatcher_send(self.hass, self.signal)
 
     async def async_unlink_marriage(self, event_id: str) -> None:
-        """Divorce: symmetrically clear the link on both sides."""
+        """Divorce/end a relationship: symmetrically clear the link and
+        delete the couple's anniversary entity, if one exists."""
         if event_id not in self.events:
             raise ServiceValidationError(f"Unknown event id: {event_id}")
-        event = self.events[event_id]
-        spouse_id = event.spouse_id
-        event.spouse_id = None
-        event.marriage_date = None
-        event.married = True
-        if spouse_id and spouse_id in self.events:
-            spouse = self.events[spouse_id]
-            spouse.spouse_id = None
-            spouse.marriage_date = None
-            spouse.married = True
+        spouse_id = self.events[event_id].spouse_id
+        self._unlink_pair_fields(event_id, spouse_id)
+        if spouse_id:
+            self._delete_anniversary_entity_for_pair(event_id, spouse_id)
 
         await self.store.async_save(list(self.events.values()))
         for eid in (event_id, spouse_id):

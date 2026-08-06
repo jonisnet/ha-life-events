@@ -139,7 +139,6 @@
   "action_end_partnership_confirm": "Oui, y mettre fin",
   "partnership_anniversary_inline": "{years} ans ensemble",
   "partnership_anniversary_years_short": "{years} ans ensemble",
-  "field_married_checkbox": "Il s'agit d'un mariage (pas seulement d'un partenariat)",
   "action_confirm_partnership": "Confirmer le partenariat",
   "action_add_marriage_date": "Ajouter la date",
   "confirm_no_marriage_date_question": "Êtes-vous sûr que la date n'est pas (encore) connue ?",
@@ -152,5 +151,12 @@
   "new_parent_firstname_label": "Prénom du nouveau parent",
   "new_parent_lastname_label": "Nom du nouveau parent (facultatif)",
   "new_parent_birthdate_label": "Date de naissance du nouveau parent",
-  "children_section_title": "Enfants"
+  "children_section_title": "Enfants",
+  "relationship_type_field_label": "Type de relation",
+  "relationship_type_option_married": "Marié(e)",
+  "relationship_type_option_registered_partnership": "Partenariat enregistré",
+  "relationship_type_option_relationship": "Relation",
+  "registered_partnership_section_title": "Partenariat enregistré",
+  "label_partner_of_bare": "Partenaire de {name}",
+  "label_anniversary_nickname": "Étape importante"
 }

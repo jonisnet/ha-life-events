@@ -122,7 +122,7 @@ class EventEntity(Entity):
             # wants to show "married to X since Y".
             if spouse:
                 attrs["spouse_name"] = spouse.name
-            attrs["married"] = event.married
+            attrs["relationship_type"] = event.relationship_type
             # marriage_date is optional - the exact date isn't always known
             # (e.g. a couple already together before this integration
             # existed) - the link is still real without it, just without an
@@ -151,6 +151,20 @@ class EventEntity(Entity):
                 attrs["parent_names"] = parent_names
             if parent_phone_numbers:
                 attrs["parent_phone_numbers"] = parent_phone_numbers
+        # Only ever set on an auto-created couple's-anniversary entity
+        # (see LifeEventsManager._upsert_anniversary_entity) - mutually
+        # exclusive with the spouse_id block above, since a person has
+        # spouse_id and this kind of entity has partner_ids, never both.
+        if event.partner_ids:
+            attrs["partner_ids"] = list(event.partner_ids)
+            attrs["relationship_type"] = event.relationship_type
+            partner_names = []
+            for partner_id in event.partner_ids:
+                partner = self._manager.events.get(partner_id)
+                if partner:
+                    partner_names.append(partner.name)
+            if partner_names:
+                attrs["partner_names"] = partner_names
         # "Children of X" is the reverse of parent_ids - deliberately not
         # stored anywhere (no mirrored children_ids field, see
         # CONF_PARENT_IDS in const.py), computed here by scanning every
