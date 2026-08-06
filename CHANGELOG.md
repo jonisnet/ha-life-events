@@ -4,6 +4,23 @@ All notable changes to Life Events are documented here. Development happens
 in beta releases (`0.0.x-beta.N`) between occasional real releases, where
 this file is consolidated into one summary per real version.
 
+## 0.0.4-beta.7
+
+### Added
+- **Parents can now be shown as a plain name list instead of phone
+  numbers**: the always-on "Telefoon van X" rows are now opt-in via a new
+  "Toon telefoonnummer van ouders" switch on the Upcoming/Month cards'
+  visual editor (off by default). With it off, linked parents show the
+  same way children already do - a clickable name list, covering every
+  linked parent regardless of whether they have a number set - since
+  automations should now use the primary-contact number instead (see
+  beta.5).
+- **Spouse/partner, parent, and child names in the details popup are now
+  clickable**, jumping straight to that person's own record. A "‹" back
+  button appears in the popup header whenever you've navigated this way,
+  returning to wherever you came from; opening a popup fresh from the
+  card's own list clears that history.
+
 ## 0.0.4-beta.6
 
 ### Changed

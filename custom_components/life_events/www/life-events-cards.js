@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.4-beta.6 loaded");
+  console.info("Life Events cards: v0.0.4-beta.7 loaded");
 
   const DOMAIN = "life_events";
 
@@ -113,6 +113,7 @@
     editor_days_ahead: "Aantal dagen vooruit",
     editor_show_icon: "Toon icoon",
     editor_collapsible: "Inklapbaar (pijlknop in de kaart)",
+    editor_show_parent_phone: "Toon telefoonnummer van ouders",
     editor_type_filter: "Type filter (leeg = alles)",
     editor_columns: "Aantal kolommen (maandknoppen)",
     editor_display_mode_label: "Weergave",
@@ -217,6 +218,7 @@
     new_parent_lastname_label: "Achternaam nieuwe ouder (optioneel)",
     new_parent_birthdate_label: "Geboortedatum nieuwe ouder",
     children_section_title: "Kinderen",
+    parents_section_title: "Ouders",
   };
 
   // Absolute directory this script itself was loaded from, used to fetch
@@ -509,6 +511,16 @@
     return out;
   }
 
+  // Wraps a cross-reference name (spouse/parent/child) as a clickable link
+  // that navigates the currently-open details popup to that person's own
+  // record instead - see bindDetailsOrEditModal's onNavigate/onBack for the
+  // history stack that makes a "Terug" button work on the way back. Falls
+  // back to plain (non-clickable) text if there's no id to navigate to.
+  function navLink(id, name) {
+    if (!id) return escapeAttr(name || "");
+    return `<span class="le-nav-link" data-nav-id="${escapeAttr(id)}">${escapeAttr(name || id)}</span>`;
+  }
+
   function escapeAttr(value) {
     return String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
   }
@@ -540,6 +552,7 @@
         parentIds: st.attributes.parent_ids || [],
         parentNames: st.attributes.parent_names || [],
         parentPhoneNumbers: st.attributes.parent_phone_numbers || [],
+        childrenIds: st.attributes.children_ids || [],
         childrenNames: st.attributes.children_names || [],
         partnerIds: st.attributes.partner_ids || [],
         partnerNames: st.attributes.partner_names || [],
@@ -755,13 +768,18 @@
   // Shared by all three cards: a read-only "details" popup on the
   // Upcoming/Month cards, and the (editable) add/edit popup on the Manage
   // card, both use the same modal shell/backdrop-close behavior.
-  function modalWrap(title, bodyHtml, closeAction) {
+  // `backAction`: optional data-action for a "‹" button shown before the
+  // title (only the Upcoming/Month details popup uses this, for
+  // navigating back up a chain of clicked spouse/parent/child links - see
+  // bindDetailsOrEditModal's onBack). Omitted everywhere else, unchanged.
+  function modalWrap(title, bodyHtml, closeAction, backAction) {
     return css`
       <div class="bd-modal-backdrop">
         <div class="bd-modal">
           <div class="bd-modal-header">
+            ${backAction ? `<button class="bd-icon-btn bd-modal-back-btn" data-action="${backAction}">‹</button>` : ""}
             <span class="bd-modal-title">${title}</span>
-            <button class="bd-icon-btn" data-action="${closeAction}">✕</button>
+            <button class="bd-icon-btn bd-modal-close-btn" data-action="${closeAction}">✕</button>
           </div>
           <div class="bd-modal-body">${bodyHtml}</div>
         </div>
@@ -788,7 +806,7 @@
         const shouldClose = downOnBackdrop && e.target === backdrop;
         downOnBackdrop = false;
         if (!shouldClose) return;
-        const closeBtn = backdrop.querySelector(".bd-modal-header [data-action]");
+        const closeBtn = backdrop.querySelector(".bd-modal-close-btn");
         if (closeBtn) closeBtn.click();
       });
     });
@@ -797,7 +815,10 @@
   // Read-only "all attributes" view for a single event - used by the
   // Upcoming/Month cards' details popup (Manage card has its own editable
   // form instead).
-  function renderDetailsBody(e, dateFormat) {
+  // `value` is normally a plain string (escaped as text). Pass
+  // `{ __html }` instead when the value needs to embed a navLink() -
+  // the caller is responsible for escaping any dynamic text inside it.
+  function renderDetailsBody(e, dateFormat, showParentPhone) {
     const rows = [
       [t("label_name"), e.name],
       [t("label_date"), formatDate(e.date, dateFormat)],
@@ -819,33 +840,48 @@
     if (e.spouseId) {
       let partnerValue;
       if (e.marriageDate) {
-        partnerValue = t("marriage_partner_since", { name: e.spouseName || e.spouseId, date: formatDate(e.marriageDate, dateFormat) });
+        partnerValue = t("marriage_partner_since", { name: navLink(e.spouseId, e.spouseName), date: formatDate(e.marriageDate, dateFormat) });
       } else if (e.relationshipType === "relationship") {
         // No date-related text at all for an informal relationship - the
         // date genuinely isn't expected to be known, unlike married/
         // registered_partnership.
-        partnerValue = t("label_partner_of_bare", { name: e.spouseName || e.spouseId });
+        partnerValue = t("label_partner_of_bare", { name: navLink(e.spouseId, e.spouseName) });
       } else {
-        partnerValue = t("marriage_partner_no_date", { name: e.spouseName || e.spouseId });
+        partnerValue = t("marriage_partner_no_date", { name: navLink(e.spouseId, e.spouseName) });
       }
-      rows.push([t(relationshipSectionTitleKey(e.relationshipType)), partnerValue]);
+      rows.push([t(relationshipSectionTitleKey(e.relationshipType)), { __html: partnerValue }]);
     }
     if (e.isCoupleAnniversary) {
       const nickname = e.relationshipType === "married" ? marriageAnniversaryNickname(e.age) : null;
       if (nickname) rows.push([t("label_anniversary_nickname"), nickname]);
     }
-    (e.parentPhoneNumbers || []).forEach((p) => rows.push([t("label_parent_phone", { name: p.name }), p.phone_number]));
-    if (e.childrenNames && e.childrenNames.length) rows.push([t("children_section_title"), e.childrenNames.join(", ")]);
+    // Two mutually exclusive display modes for linked parents, gated by
+    // the card's own show_parent_phone config (off by default): with
+    // phone numbers (only parents that actually have one set, unchanged
+    // from the original behavior), or - like children below - a plain
+    // clickable name list covering every linked parent regardless of
+    // whether they have a number.
+    if (showParentPhone) {
+      (e.parentPhoneNumbers || []).forEach((p) => rows.push([t("label_parent_phone", { name: p.name }), p.phone_number]));
+    } else if (e.parentNames && e.parentNames.length) {
+      const links = e.parentNames.map((name, i) => navLink((e.parentIds || [])[i], name)).join(", ");
+      rows.push([t("parents_section_title"), { __html: links }]);
+    }
+    if (e.childrenNames && e.childrenNames.length) {
+      const links = e.childrenNames.map((name, i) => navLink((e.childrenIds || [])[i], name)).join(", ");
+      rows.push([t("children_section_title"), { __html: links }]);
+    }
     Object.entries(e.attributes || {}).forEach(([k, v]) => rows.push([k, v]));
     const rowsHtml = rows
-      .map(
-        ([label, value]) => css`
+      .map(([label, value]) => {
+        const valueHtml = value && typeof value === "object" && "__html" in value ? value.__html : escapeAttr(value);
+        return css`
           <div class="bd-details-row">
             <div class="bd-details-label">${escapeAttr(label)}</div>
-            <div class="bd-details-value">${escapeAttr(value)}</div>
+            <div class="bd-details-value">${valueHtml}</div>
           </div>
-        `
-      )
+        `;
+      })
       .join("");
     // A full sentence ("X jaar geleden overleden"), not another label/value
     // pair - shown as its own quiet, italic line rather than forced into
@@ -1867,7 +1903,12 @@
   // into the same edit form the Manage card uses, via a "Bewerken" button.
   // `detailsEvent` is the resolved event object (or null - no popup); the
   // returned HTML already includes the modal wrapper.
-  function renderDetailsOrEditModal(detailsEvent, formMode, confirmDelete, dateFormat, hass) {
+  // `canGoBack`: true when there's a details-navigation history to return
+  // to (see the Upcoming/Month cards' _detailsHistory) - shows a "‹" back
+  // button in the modal header, only in read-only mode (not while editing
+  // or on a couple's-anniversary entity, which has no incoming nav links
+  // pointing at it - see navLink's only callers).
+  function renderDetailsOrEditModal(detailsEvent, formMode, confirmDelete, dateFormat, hass, showParentPhone, canGoBack) {
     if (!detailsEvent) return "";
     const editingId = detailsEvent.entity_id.split(".")[1];
     const title = css`
@@ -1887,21 +1928,29 @@
     const body = formMode
       ? renderEventFormBody(detailsEvent, editingId, confirmDelete, hass)
       : css`
-          ${renderDetailsBody(detailsEvent, dateFormat)}
+          ${renderDetailsBody(detailsEvent, dateFormat, showParentPhone)}
           <button type="button" class="bd-btn bd-details-edit-btn" data-action="start-edit">
             <ha-icon icon="mdi:pencil"></ha-icon> ${t("action_edit")}
           </button>
         `;
-    return modalWrap(title, body, formMode ? "cancel" : "close-details");
+    return modalWrap(title, body, formMode ? "cancel" : "close-details", !formMode && canGoBack ? "details-back" : null);
   }
 
   // ctx: hass, detailsId, formMode, isCoupleAnniversary, onStartEdit(),
   // onClose(), onSave(result), onCancelEdit(), onDeleteRequest(),
-  // onDeleteCancel(), onDeleteConfirm(), onRefresh()
+  // onDeleteCancel(), onDeleteConfirm(), onRefresh(), onNavigate(id),
+  // onBack()
   function bindDetailsOrEditModal(root, ctx) {
     root.querySelectorAll('[data-action="close-details"]').forEach((btn) => btn.addEventListener("click", ctx.onClose));
     const startEditBtn = root.querySelector('[data-action="start-edit"]');
     if (startEditBtn) startEditBtn.addEventListener("click", ctx.onStartEdit);
+    const backBtn = root.querySelector('[data-action="details-back"]');
+    if (backBtn && ctx.onBack) backBtn.addEventListener("click", ctx.onBack);
+    if (ctx.onNavigate) {
+      root.querySelectorAll(".le-nav-link").forEach((link) =>
+        link.addEventListener("click", () => ctx.onNavigate(link.dataset.navId))
+      );
+    }
     // A couple's-anniversary entity's read-only view already includes
     // cancel/delete actions (see renderAnniversaryDetailsBody) with no
     // separate formMode at all - bind the same handlers regardless.
@@ -2355,6 +2404,8 @@
             .le-contact-options { display: flex; flex-wrap: wrap; gap: 6px; }
             .le-contact-option { font-size: 12px; padding: 4px 10px; border-radius: 12px; border: 1px solid var(--divider-color); cursor: pointer; background: var(--secondary-background-color); color: var(--secondary-text-color); font: inherit; text-decoration: line-through; opacity: 0.7; }
             .le-contact-option.active { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); text-decoration: none; opacity: 1; font-weight: 600; }
+            .le-nav-link { color: var(--primary-color); cursor: pointer; text-decoration: underline; }
+            .bd-modal-back-btn { font-size: 22px; line-height: 1; }
           </style>
           ${headerHtml}
           <div class="bd-body" style="${collapsed ? "display:none;" : ""}">${bodyHtml}</div>
@@ -2387,6 +2438,11 @@
     constructor() {
       super();
       this._detailsId = null;
+      // Stack of previously-viewed detailsIds, pushed to whenever a
+      // spouse/parent/child navLink is clicked inside the popup (see
+      // onNavigate below) - lets the "‹" back button return to wherever
+      // you drilled in from, not just close outright.
+      this._detailsHistory = [];
       this._formMode = false;
       this._confirmDelete = false;
       this._countdownInterval = null;
@@ -2471,7 +2527,7 @@
 
       const bodyHtml = css`
         ${rows}
-        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete, this._config.date_format, this._hass)}
+        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete, this._config.date_format, this._hass, this._config.show_parent_phone === true, this._detailsHistory.length > 0)}
       `;
 
       // Most hass ticks are caused by some unrelated entity elsewhere in HA
@@ -2489,6 +2545,7 @@
       this.shadowRoot.querySelectorAll('[data-action="details"]').forEach((row) =>
         row.addEventListener("click", () => {
           this._detailsId = row.dataset.id;
+          this._detailsHistory = []; // fresh navigation from the list, not a drill-down
           this._formMode = false;
           this._render();
         })
@@ -2504,6 +2561,7 @@
         },
         onClose: () => {
           this._detailsId = null;
+          this._detailsHistory = [];
           this._formMode = false;
           this._confirmDelete = false;
           this._render();
@@ -2528,11 +2586,25 @@
         },
         onDeleteConfirm: () => {
           this._detailsId = null;
+          this._detailsHistory = [];
           this._formMode = false;
           this._confirmDelete = false;
           this._render();
         },
         onRefresh: () => this._render(),
+        onNavigate: (id) => {
+          if (this._detailsId) this._detailsHistory.push(this._detailsId);
+          this._detailsId = id;
+          this._formMode = false;
+          this._confirmDelete = false;
+          this._render();
+        },
+        onBack: () => {
+          this._detailsId = this._detailsHistory.pop() || null;
+          this._formMode = false;
+          this._confirmDelete = false;
+          this._render();
+        },
       });
       bindModalBackdrops(this.shadowRoot);
 
@@ -2609,6 +2681,9 @@
           <ha-formfield label="${t("editor_collapsible")}">
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
+          <ha-formfield label="${t("editor_show_parent_phone")}">
+            <ha-switch id="show_parent_phone" ${this._config.show_parent_phone ? "checked" : ""}></ha-switch>
+          </ha-formfield>
           ${renderDateFormatFields(this._config)}
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
@@ -2617,6 +2692,7 @@
       this.querySelector("#days_ahead").addEventListener("input", (e) => this._update({ days_ahead: Number(e.target.value) }));
       this.querySelector("#show_icon").addEventListener("change", (e) => this._update({ show_icon: e.target.checked }));
       this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
+      this.querySelector("#show_parent_phone").addEventListener("change", (e) => this._update({ show_parent_phone: e.target.checked }));
       bindDateFormatFields(this, this._config, (patch) => this._update(patch));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
@@ -2640,6 +2716,7 @@
       super();
       this._selectedMonth = new Date().getMonth() + 1;
       this._detailsId = null;
+      this._detailsHistory = [];
       this._formMode = false;
       this._confirmDelete = false;
       // Table sort state. `_sortOrder` is priority order (first = primary
@@ -2750,7 +2827,7 @@
       const bodyHtml = css`
         <div class="bd-months">${buttons}</div>
         ${table}
-        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete, this._config.date_format, this._hass)}
+        ${renderDetailsOrEditModal(detailsEvent, this._formMode, this._confirmDelete, this._config.date_format, this._hass, this._config.show_parent_phone === true, this._detailsHistory.length > 0)}
       `;
 
       // See LifeEventsUpcomingCard._render() for why this skips the full
@@ -2773,6 +2850,7 @@
       this.shadowRoot.querySelectorAll('[data-action="details"]').forEach((row) =>
         row.addEventListener("click", () => {
           this._detailsId = row.dataset.id;
+          this._detailsHistory = []; // fresh navigation from the table, not a drill-down
           this._formMode = false;
           this._render();
         })
@@ -2788,6 +2866,7 @@
         },
         onClose: () => {
           this._detailsId = null;
+          this._detailsHistory = [];
           this._formMode = false;
           this._confirmDelete = false;
           this._render();
@@ -2812,11 +2891,25 @@
         },
         onDeleteConfirm: () => {
           this._detailsId = null;
+          this._detailsHistory = [];
           this._formMode = false;
           this._confirmDelete = false;
           this._render();
         },
         onRefresh: () => this._render(),
+        onNavigate: (id) => {
+          if (this._detailsId) this._detailsHistory.push(this._detailsId);
+          this._detailsId = id;
+          this._formMode = false;
+          this._confirmDelete = false;
+          this._render();
+        },
+        onBack: () => {
+          this._detailsId = this._detailsHistory.pop() || null;
+          this._formMode = false;
+          this._confirmDelete = false;
+          this._render();
+        },
       });
       bindModalBackdrops(this.shadowRoot);
     }
@@ -2855,6 +2948,9 @@
           <ha-formfield label="${t("editor_collapsible")}">
             <ha-switch id="collapsible" ${this._config.collapsible ? "checked" : ""}></ha-switch>
           </ha-formfield>
+          <ha-formfield label="${t("editor_show_parent_phone")}">
+            <ha-switch id="show_parent_phone" ${this._config.show_parent_phone ? "checked" : ""}></ha-switch>
+          </ha-formfield>
           ${renderDateFormatFields(this._config)}
           ${renderEventTypeCheckboxes(this._config.event_types)}
         </div>
@@ -2862,6 +2958,7 @@
       this.querySelector("#title").addEventListener("input", (e) => this._update({ title: e.target.value }));
       this.querySelector("#columns").addEventListener("input", (e) => this._update({ columns: Number(e.target.value) }));
       this.querySelector("#collapsible").addEventListener("change", (e) => this._update({ collapsible: e.target.checked }));
+      this.querySelector("#show_parent_phone").addEventListener("change", (e) => this._update({ show_parent_phone: e.target.checked }));
       bindDateFormatFields(this, this._config, (patch) => this._update(patch));
       bindEventTypeCheckboxes(this, (event_types) => this._update({ event_types }));
     }
