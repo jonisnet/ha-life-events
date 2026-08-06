@@ -162,5 +162,6 @@
   "primary_contact_section_title": "Primair contact",
   "primary_contact_hint": "Welk telefoonnummer moet gebruikt worden voor automatiseringen (bijv. WhatsApp)?",
   "primary_contact_self_option": "Zelf",
-  "label_primary_contact_value": "{name} ({number})"
+  "label_primary_contact_value": "{name} ({number})",
+  "primary_contact_inline": "Primair: {name} ({number})"
 }

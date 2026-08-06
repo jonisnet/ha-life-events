@@ -4,6 +4,19 @@ All notable changes to Life Events are documented here. Development happens
 in beta releases (`0.0.x-beta.N`) between occasional real releases, where
 this file is consolidated into one summary per real version.
 
+## 0.0.4-beta.6
+
+### Changed
+- **Primary contact is now visible in the overview, not just the details
+  popup**: when a person's primary contact is delegated to someone else,
+  the Upcoming card's row and the Manage card's list row both now show
+  who it is and their number, at a glance - no need to open the popup to
+  check.
+- **The primary-contact picker's selected button now stands out more
+  clearly**: the chosen option (e.g. "Zelf" or a parent's name) reads
+  normally, while every other option is struck through to show it's not
+  currently active.
+
 ## 0.0.4-beta.5
 
 ### Added

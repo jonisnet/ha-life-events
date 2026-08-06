@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.4-beta.5 loaded");
+  console.info("Life Events cards: v0.0.4-beta.6 loaded");
 
   const DOMAIN = "life_events";
 
@@ -203,6 +203,7 @@
     primary_contact_hint: "Welk telefoonnummer moet gebruikt worden voor automatiseringen (bijv. WhatsApp)?",
     primary_contact_self_option: "Zelf",
     label_primary_contact_value: "{name} ({number})",
+    primary_contact_inline: "Primair: {name} ({number})",
     action_confirm_partnership: "Bevestig partnerschap",
     action_add_marriage_date: "Datum toevoegen",
     confirm_no_marriage_date_question: "Weet je zeker dat de datum (nog) niet bekend is?",
@@ -2007,9 +2008,12 @@
       .le-editor-label { font-size: 12px; color: var(--secondary-text-color); margin-bottom: -8px; }
       .le-editor-types { display: flex; flex-wrap: wrap; gap: 4px 16px; }
       .le-hint { font-size: 12px; color: var(--secondary-text-color); margin-top: -8px; }
-      .le-contact-options { display: flex; flex-wrap: wrap; gap: 6px; }
-      .le-contact-option { font-size: 12px; padding: 4px 10px; border-radius: 12px; border: 1px solid var(--divider-color); cursor: pointer; background: var(--secondary-background-color); color: var(--primary-text-color); font: inherit; }
-      .le-contact-option.active { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
+      /* .le-contact-option(s) live in LifeEventsBaseCard._shell()'s own
+         <style> block instead of here - unlike this EDITOR_STYLE constant
+         (only included by Upcoming/Month's _render() and the config
+         editors), _shell() is the one style location shared by all THREE
+         live cards' _render(), including Manage's - and the primary-
+         contact picker renders inside Manage's own popup too. */
       .le-fixed-attr-row { display: flex; gap: 8px; align-items: center; }
       .le-fixed-attr-row input, .le-fixed-attr-row select {
         font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 6px;
@@ -2348,6 +2352,9 @@
             .bd-icon-btn { cursor: pointer; background: none; border: none; color: var(--secondary-text-color); font-size: 18px; padding: 4px; }
             .bd-section-title { font-weight: 600; margin: 16px 0 4px; }
             .bd-type-badge { font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--secondary-background-color); color: var(--secondary-text-color); }
+            .le-contact-options { display: flex; flex-wrap: wrap; gap: 6px; }
+            .le-contact-option { font-size: 12px; padding: 4px 10px; border-radius: 12px; border: 1px solid var(--divider-color); cursor: pointer; background: var(--secondary-background-color); color: var(--secondary-text-color); font: inherit; text-decoration: line-through; opacity: 0.7; }
+            .le-contact-option.active { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); text-decoration: none; opacity: 1; font-weight: 600; }
           </style>
           ${headerHtml}
           <div class="bd-body" style="${collapsed ? "display:none;" : ""}">${bodyHtml}</div>
@@ -2430,13 +2437,21 @@
                 e.isCoupleAnniversary && e.age != null
                   ? ` &middot; ${t(isMarried ? "marriage_anniversary_inline" : "partnership_anniversary_inline", { years: e.age })}${nickname ? ` (${nickname})` : ""}`
                   : "";
+              // Only shown when delegation is actually in effect (resolves
+              // to someone other than this person) - same gating as
+              // renderDetailsBody, so the overview isn't cluttered with
+              // "Primair: <own name>" for everyone who hasn't set this up.
+              const primaryContactText =
+                e.primaryContactName && e.primaryPhoneNumber && e.primaryContactName !== e.name
+                  ? ` &middot; ${t("primary_contact_inline", { name: e.primaryContactName, number: e.primaryPhoneNumber })}`
+                  : "";
               return css`
               <div class="bd-row" data-action="details" data-id="${e.entity_id.split(".")[1]}">
                 <div class="bd-left">
                   ${this._config.show_icon === false ? "" : `<ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>`}
                   <div>
                     <div class="bd-name">${e.name}</div>
-                    <div class="bd-secondary">${formatDate(e.date, this._config.date_format)} &middot; ${eventTypeLabel(e.eventType)}${becomesText}${deceasedText}${marriageText}</div>
+                    <div class="bd-secondary">${formatDate(e.date, this._config.date_format)} &middot; ${eventTypeLabel(e.eventType)}${becomesText}${deceasedText}${marriageText}${primaryContactText}</div>
                     ${i === 0 ? `<div class="bd-secondary" id="le-countdown"></div>` : ""}
                   </div>
                 </div>
@@ -2993,14 +3008,22 @@
 
       return events.length
         ? events
-            .map(
-              (e) => css`
+            .map((e) => {
+              // Same gating as the Upcoming card's row / renderDetailsBody -
+              // only shown when delegation actually resolves to someone
+              // other than this person.
+              const primaryContactLine =
+                e.primaryContactName && e.primaryPhoneNumber && e.primaryContactName !== e.name
+                  ? `<div class="bd-secondary">${escapeAttr(t("primary_contact_inline", { name: e.primaryContactName, number: e.primaryPhoneNumber }))}</div>`
+                  : "";
+              return css`
               <div class="bd-row" data-action="edit" data-id="${e.entity_id.split(".")[1]}">
                 <div class="bd-left">
                   <ha-icon icon="${e.icon || EVENT_TYPE_ICONS[e.eventType]}"></ha-icon>
                   <div>
                     <div class="bd-name">${e.name}</div>
                     <div class="bd-secondary">${formatDate(e.date, this._config.date_format)} &middot; <span class="bd-type-badge">${eventTypeLabel(e.eventType)}</span></div>
+                    ${primaryContactLine}
                     ${Object.keys(e.attributes).length
                       ? `<div class="bd-secondary">${Object.entries(e.attributes)
                           .map(([k, v]) => `${escapeAttr(k)}: ${escapeAttr(v)}`)
@@ -3009,8 +3032,8 @@
                   </div>
                 </div>
               </div>
-            `
-            )
+            `;
+            })
             .join("")
         : `<div class="bd-empty">${t("panel_no_results")}</div>`;
     }

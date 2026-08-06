@@ -162,5 +162,6 @@
   "primary_contact_section_title": "Primary contact",
   "primary_contact_hint": "Which phone number should be used for automations (e.g. WhatsApp)?",
   "primary_contact_self_option": "Self",
-  "label_primary_contact_value": "{name} ({number})"
+  "label_primary_contact_value": "{name} ({number})",
+  "primary_contact_inline": "Primary: {name} ({number})"
 }
