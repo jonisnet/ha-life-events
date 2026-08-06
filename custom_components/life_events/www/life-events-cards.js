@@ -47,7 +47,7 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v0.0.4-beta.4 loaded");
+  console.info("Life Events cards: v0.0.4-beta.5 loaded");
 
   const DOMAIN = "life_events";
 
@@ -199,6 +199,10 @@
     registered_partnership_section_title: "Geregistreerd partnerschap",
     label_partner_of_bare: "Partner van {name}",
     label_anniversary_nickname: "Mijlpaal",
+    primary_contact_section_title: "Primair contact",
+    primary_contact_hint: "Welk telefoonnummer moet gebruikt worden voor automatiseringen (bijv. WhatsApp)?",
+    primary_contact_self_option: "Zelf",
+    label_primary_contact_value: "{name} ({number})",
     action_confirm_partnership: "Bevestig partnerschap",
     action_add_marriage_date: "Datum toevoegen",
     confirm_no_marriage_date_question: "Weet je zeker dat de datum (nog) niet bekend is?",
@@ -493,6 +497,7 @@
     "days_until_marriage_anniversary", "years_at_next_marriage_anniversary",
     "parent_ids", "parent_names", "parent_phone_numbers", "children_ids", "children_names",
     "partner_ids", "partner_names",
+    "primary_contact_id", "primary_phone_number", "primary_contact_name", "primary_whatsapp_link",
   ]);
 
   function customAttributesOf(st) {
@@ -539,6 +544,10 @@
         partnerNames: st.attributes.partner_names || [],
         isCoupleAnniversary: (st.attributes.partner_ids || []).length === 2,
         phoneNumber: st.attributes.phone_number,
+        primaryContactId: st.attributes.primary_contact_id,
+        primaryPhoneNumber: st.attributes.primary_phone_number,
+        primaryContactName: st.attributes.primary_contact_name,
+        primaryWhatsappLink: st.attributes.primary_whatsapp_link,
         time: st.attributes.time,
         attributes: customAttributesOf(st),
       }))
@@ -797,6 +806,15 @@
     if (e.eventType !== "deceased" && e.age != null) rows.push([t("label_becomes"), e.age]);
     if (e.eventType === "deceased" && e.dateOfDeath) rows.push([t("label_date_of_death"), formatDate(e.dateOfDeath, dateFormat)]);
     if (e.phoneNumber) rows.push([t("label_phone"), e.phoneNumber]);
+    // Only shown when delegation is actually in effect (resolves to
+    // someone other than this person) - otherwise the "Telefoon" row above
+    // already covers it, no need to repeat "Zelf".
+    if (e.primaryContactName && e.primaryPhoneNumber && e.primaryContactName !== e.name) {
+      rows.push([
+        t("primary_contact_section_title"),
+        t("label_primary_contact_value", { name: e.primaryContactName, number: e.primaryPhoneNumber }),
+      ]);
+    }
     if (e.spouseId) {
       let partnerValue;
       if (e.marriageDate) {
@@ -1174,6 +1192,63 @@
     `;
   }
 
+  // Candidates for "primary contact" delegation: the linked spouse/partner
+  // and/or linked parent(s) - the same people already shown via spouseId/
+  // parentIds on `editing`, no separate lookup needed. Absent entirely
+  // (returns []) when there's nobody to delegate to.
+  function primaryContactCandidates(editing) {
+    const candidates = [];
+    if (editing.spouseId) {
+      candidates.push({ value: editing.spouseId, label: editing.spouseName || editing.spouseId });
+    }
+    (editing.parentIds || []).forEach((id, i) => {
+      const label = (editing.parentNames || [])[i] || id;
+      candidates.push({ value: id, label });
+    });
+    return candidates;
+  }
+
+  // A row of clickable buttons ("Zelf" + one per linked spouse/parent) that
+  // sets a hidden #f-primary-contact-id input - the "handige UI knop" the
+  // feature was asked for, rather than a dropdown, since there are at most
+  // 3-4 candidates. Only rendered when there's at least one real candidate
+  // (nothing to delegate to otherwise). The picked value rides the normal
+  // form payload (see readFormFieldsRaw/validateAndBuildPayload), same
+  // spirit as parent_ids - no service call of its own.
+  function renderPrimaryContactSection(editing) {
+    if (!editing) return "";
+    const candidates = primaryContactCandidates(editing);
+    if (!candidates.length) return "";
+    const current = editing.primaryContactId || "";
+    const options = [{ value: "", label: t("primary_contact_self_option") }, ...candidates];
+    const optionsHtml = options
+      .map(
+        (opt) => css`
+          <button type="button" class="le-contact-option${opt.value === current ? " active" : ""}" data-value="${escapeAttr(opt.value)}">${escapeAttr(opt.label)}</button>
+        `
+      )
+      .join("");
+    return css`
+      <label>${t("primary_contact_section_title")}</label>
+      <div class="le-hint">${t("primary_contact_hint")}</div>
+      <div class="le-contact-options">${optionsHtml}</div>
+      <input type="hidden" id="f-primary-contact-id" value="${escapeAttr(current)}" />
+    `;
+  }
+
+  // Binds renderPrimaryContactSection()'s buttons - clicking one just
+  // updates the hidden input + active-class highlighting, no service call.
+  function bindPrimaryContactSection(root) {
+    const hidden = root.querySelector("#f-primary-contact-id");
+    if (!hidden) return;
+    root.querySelectorAll(".le-contact-option").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        hidden.value = btn.dataset.value || "";
+        root.querySelectorAll(".le-contact-option").forEach((b) => b.classList.toggle("active", b === btn));
+      });
+    });
+  }
+
   function renderEventFormBody(editing, editingId, confirmDelete, hass) {
     const nameParts = splitName(editing ? editing.name : "");
     return css`
@@ -1211,6 +1286,7 @@
         </div>
         ${renderMarriageSection(editing, editingId, hass)}
         ${renderParentSection(editing, editingId, hass)}
+        ${renderPrimaryContactSection(editing)}
         ${fixedAttributeFieldsHtml(editing)}
         <label>${t("field_custom_attrs")}</label>
         <div id="f-attrs-rows">${attrRowsHtml(freeformAttributesOf(editing ? editing.attributes : {}))}</div>
@@ -1317,6 +1393,7 @@
       `icon: ${yamlLiteValue(fields.icon)}`,
       `phone: ${yamlLiteValue(fields.phoneNumber)}`,
       `parent_ids: ${yamlLiteValue((fields.parentIds || []).join(", "))}`,
+      `primary_contact_id: ${yamlLiteValue(fields.primaryContactId)}`,
     ];
     const attrKeys = Object.keys(fields.attributes || {});
     if (!attrKeys.length) {
@@ -1341,7 +1418,7 @@
   // save path goes through - so a typo here surfaces as the normal "Voornaam
   // en datum zijn verplicht" message, not a crash.
   function parseYamlLite(text) {
-    const fields = { firstName: "", lastName: "", eventType: "birthday", date: "", time: "", dateOfDeath: "", icon: "", phoneNumber: "", parentIds: [], attributes: {} };
+    const fields = { firstName: "", lastName: "", eventType: "birthday", date: "", time: "", dateOfDeath: "", icon: "", phoneNumber: "", parentIds: [], primaryContactId: "", attributes: {} };
     const KEY_MAP = { firstname: "firstName", lastname: "lastName", type: "eventType", date: "date", time: "time", date_of_death: "dateOfDeath", icon: "icon", phone: "phoneNumber" };
     let inAttributes = false;
     for (const rawLine of (text || "").split("\n")) {
@@ -1359,6 +1436,10 @@
             .split(",")
             .map((v) => v.trim())
             .filter((v) => v);
+          continue;
+        }
+        if (key === "primary_contact_id") {
+          fields.primaryContactId = value.trim();
           continue;
         }
         const fieldName = KEY_MAP[key];
@@ -1384,6 +1465,7 @@
       phoneNumber: fields.phoneNumber,
       eventType: fields.eventType,
       parentIds: fields.parentIds || [],
+      primaryContactId: fields.primaryContactId || "",
       attributes: fields.attributes,
     };
   }
@@ -1423,7 +1505,10 @@
       })
       .filter((v) => v);
 
-    return { firstName, lastName, eventType, date, time, dateOfDeath, icon, phoneNumber, parentIds, attributes };
+    const primaryContactIdEl = root.querySelector("#f-primary-contact-id");
+    const primaryContactId = primaryContactIdEl ? primaryContactIdEl.value : "";
+
+    return { firstName, lastName, eventType, date, time, dateOfDeath, icon, phoneNumber, parentIds, primaryContactId, attributes };
   }
 
   // Validates a `fields` object (from either readFormFieldsRaw() or
@@ -1470,6 +1555,9 @@
     // it - same "replaced wholesale, not merged" rule as time/attributes
     // above (see manager.py's async_update_event merge dict).
     data.parent_ids = fields.parentIds || [];
+    // Always included (even ""), so picking "Zelf" actually clears a
+    // previously set delegation - same wholesale-replace rule as above.
+    data.primary_contact_id = fields.primaryContactId || "";
     data.attributes = fields.attributes;
     return { ok: true, data };
   }
@@ -1581,6 +1669,7 @@
 
     bindMarriageSection(root, ctx);
     bindParentSection(root, ctx);
+    bindPrimaryContactSection(root);
     bindSearchableSelect(root, "f-phone-country", phoneCountryOptions(), null);
   }
 
@@ -1918,6 +2007,9 @@
       .le-editor-label { font-size: 12px; color: var(--secondary-text-color); margin-bottom: -8px; }
       .le-editor-types { display: flex; flex-wrap: wrap; gap: 4px 16px; }
       .le-hint { font-size: 12px; color: var(--secondary-text-color); margin-top: -8px; }
+      .le-contact-options { display: flex; flex-wrap: wrap; gap: 6px; }
+      .le-contact-option { font-size: 12px; padding: 4px 10px; border-radius: 12px; border: 1px solid var(--divider-color); cursor: pointer; background: var(--secondary-background-color); color: var(--primary-text-color); font: inherit; }
+      .le-contact-option.active { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
       .le-fixed-attr-row { display: flex; gap: 8px; align-items: center; }
       .le-fixed-attr-row input, .le-fixed-attr-row select {
         font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 6px;

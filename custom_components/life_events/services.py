@@ -40,6 +40,7 @@ ADD_EVENT_SCHEMA = vol.Schema(
         vol.Optional("phone_number"): cv.string,
         vol.Optional("time"): cv.string,
         vol.Optional("parent_ids", default=[]): vol.All(cv.ensure_list, [cv.string], vol.Length(max=2)),
+        vol.Optional("primary_contact_id"): cv.string,
         vol.Optional("attributes", default={}): {cv.string: cv.string},
     }
 )
@@ -55,6 +56,7 @@ UPDATE_EVENT_SCHEMA = vol.Schema(
         vol.Optional("phone_number"): cv.string,
         vol.Optional("time"): cv.string,
         vol.Optional("parent_ids"): vol.All(cv.ensure_list, [cv.string], vol.Length(max=2)),
+        vol.Optional("primary_contact_id"): cv.string,
         vol.Optional("attributes"): {cv.string: cv.string},
     }
 )

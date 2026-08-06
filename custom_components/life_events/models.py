@@ -19,6 +19,7 @@ from .const import (
     CONF_PARENT_IDS,
     CONF_PARTNER_IDS,
     CONF_PHONE_NUMBER,
+    CONF_PRIMARY_CONTACT_ID,
     CONF_RELATIONSHIP_TYPE,
     CONF_SPOUSE_ID,
     CONF_TIME,
@@ -113,6 +114,12 @@ class Event:
     # LifeEventsManager._upsert_anniversary_entity, never through plain
     # add_event/update_event.
     partner_ids: list[str] = field(default_factory=list)
+    # Whose phone_number counts as "primary" for automations - see
+    # CONF_PRIMARY_CONTACT_ID in const.py. None means "my own". Rides the
+    # normal add/update_event path like parent_ids, but unlike parent_ids
+    # this value is re-validated for staleness on every read (in
+    # entity.py), not just at write time.
+    primary_contact_id: str | None = None
     attributes: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -135,6 +142,7 @@ class Event:
         relationship_type: str = RELATIONSHIP_TYPE_MARRIED,
         parent_ids: list[str] | None = None,
         partner_ids: list[str] | None = None,
+        primary_contact_id: str | None = None,
         attributes: dict[str, str] | None = None,
     ) -> "Event":
         return cls(
@@ -151,6 +159,7 @@ class Event:
             relationship_type=relationship_type,
             parent_ids=list(parent_ids or []),
             partner_ids=list(partner_ids or []),
+            primary_contact_id=primary_contact_id or None,
             attributes=dict(attributes or {}),
         )
 
@@ -169,6 +178,7 @@ class Event:
             CONF_RELATIONSHIP_TYPE: self.relationship_type,
             CONF_PARENT_IDS: list(self.parent_ids),
             CONF_PARTNER_IDS: list(self.partner_ids),
+            CONF_PRIMARY_CONTACT_ID: self.primary_contact_id,
             CONF_ATTRIBUTES: dict(self.attributes),
         }
 
@@ -188,6 +198,7 @@ class Event:
             relationship_type=_coerce_relationship_type(raw),
             parent_ids=list(raw.get(CONF_PARENT_IDS) or []),
             partner_ids=list(raw.get(CONF_PARTNER_IDS) or []),
+            primary_contact_id=raw.get(CONF_PRIMARY_CONTACT_ID) or None,
             attributes=dict(raw.get(CONF_ATTRIBUTES) or {}),
         )
 

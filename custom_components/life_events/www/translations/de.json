@@ -158,5 +158,9 @@
   "relationship_type_option_relationship": "Beziehung",
   "registered_partnership_section_title": "Eingetragene Partnerschaft",
   "label_partner_of_bare": "Partner von {name}",
-  "label_anniversary_nickname": "Meilenstein"
+  "label_anniversary_nickname": "Meilenstein",
+  "primary_contact_section_title": "Primärer Kontakt",
+  "primary_contact_hint": "Welche Telefonnummer soll für Automatisierungen (z. B. WhatsApp) verwendet werden?",
+  "primary_contact_self_option": "Selbst",
+  "label_primary_contact_value": "{name} ({number})"
 }

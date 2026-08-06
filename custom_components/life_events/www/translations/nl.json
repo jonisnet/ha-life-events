@@ -158,5 +158,9 @@
   "relationship_type_option_relationship": "Relatie",
   "registered_partnership_section_title": "Geregistreerd partnerschap",
   "label_partner_of_bare": "Partner van {name}",
-  "label_anniversary_nickname": "Mijlpaal"
+  "label_anniversary_nickname": "Mijlpaal",
+  "primary_contact_section_title": "Primair contact",
+  "primary_contact_hint": "Welk telefoonnummer moet gebruikt worden voor automatiseringen (bijv. WhatsApp)?",
+  "primary_contact_self_option": "Zelf",
+  "label_primary_contact_value": "{name} ({number})"
 }

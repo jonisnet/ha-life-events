@@ -176,6 +176,27 @@ class LifeEventsManager:
             if event_id in self.events[parent_id].parent_ids:
                 raise ServiceValidationError("Cannot set your own child as your parent")
 
+    def _validate_primary_contact_id(
+        self, spouse_id: str | None, parent_ids: list[str], primary_contact_id: str | None
+    ) -> None:
+        """primary_contact_id, if set, must be the linked spouse or a linked parent.
+
+        Only a set-time guard - entity.py's resolution independently
+        re-checks this on every read, so a delegate that later becomes
+        stale (divorce, parent unlinked/deleted) just falls back to the
+        person's own number instead of leaving a dangling, unvalidated
+        reference around.
+        """
+        if not primary_contact_id:
+            return
+        valid_targets = set(parent_ids)
+        if spouse_id:
+            valid_targets.add(spouse_id)
+        if primary_contact_id not in valid_targets:
+            raise ServiceValidationError(
+                "primary_contact_id must be the linked spouse or a linked parent"
+            )
+
     # -- CRUD -----------------------------------------------------------------
 
     def _refresh_parents(self, parent_ids: set[str]) -> None:
@@ -197,6 +218,7 @@ class LifeEventsManager:
         self._check_required_attributes(fields.get("attributes") or {})
         event = Event.create(**fields)
         self._validate_parent_ids(event.id, event.parent_ids)
+        self._validate_primary_contact_id(event.spouse_id, event.parent_ids, event.primary_contact_id)
         self.events[event.id] = event
         await self.store.async_save(list(self.events.values()))
         new_entity = EventEntity(self, event.id)
@@ -230,10 +252,14 @@ class LifeEventsManager:
             "relationship_type": current.relationship_type,
             "parent_ids": fields.get("parent_ids", current.parent_ids),
             "partner_ids": current.partner_ids,
+            "primary_contact_id": fields.get("primary_contact_id", current.primary_contact_id),
             "attributes": fields.get("attributes", current.attributes),
         }
         self._check_required_attributes(merged["attributes"])
         self._validate_parent_ids(event_id, merged["parent_ids"])
+        self._validate_primary_contact_id(
+            current.spouse_id, merged["parent_ids"], merged["primary_contact_id"]
+        )
         changed_parent_ids = set(current.parent_ids) ^ set(merged["parent_ids"])
         updated = Event.create(**merged)
         self.events[event_id] = updated

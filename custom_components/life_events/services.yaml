@@ -51,6 +51,11 @@ add_event:
       description: "At most 2 event ids of this person's parents. Not mirrored on the parent's own record."
       selector:
         object:
+    primary_contact_id:
+      required: false
+      description: "Event id of the linked spouse or a linked parent to treat as the primary contact (e.g. for a child's WhatsApp automations) instead of this person's own number. Must be spouse_id or one of parent_ids."
+      selector:
+        text:
     attributes:
       required: false
       description: Freeform extra attributes (key/value pairs).
@@ -104,6 +109,11 @@ update_event:
       description: "At most 2 event ids of this person's parents. Not mirrored on the parent's own record."
       selector:
         object:
+    primary_contact_id:
+      required: false
+      description: "Event id of the linked spouse or a linked parent to treat as the primary contact (e.g. for a child's WhatsApp automations) instead of this person's own number. Must be spouse_id or one of parent_ids. Send an empty string to clear it back to using this person's own number."
+      selector:
+        text:
     attributes:
       required: false
       selector:

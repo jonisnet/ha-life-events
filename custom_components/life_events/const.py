@@ -70,6 +70,16 @@ CONF_PARENT_IDS = "parent_ids"
 # auto-created couple's-anniversary entity from an ordinary/legacy-imported
 # standalone anniversary Event, which has no partner_ids at all.
 CONF_PARTNER_IDS = "partner_ids"
+# Which linked person's phone_number should be treated as "primary" for
+# automation purposes (e.g. building a WhatsApp link) instead of this
+# person's own. Must be spouse_id or one of parent_ids at set time
+# (enforced in manager.py's _validate_primary_contact_id) - but resolution
+# in entity.py re-checks that on every read rather than proactively
+# clearing this field when a link is later broken (divorce, parent
+# unlinked/deleted), so a stale value just falls back to the person's own
+# number instead of erroring. None means "use my own number", the default
+# for everyone. Settable through the normal add/update_event services.
+CONF_PRIMARY_CONTACT_ID = "primary_contact_id"
 
 # Legacy YAML fields (kept so existing configuration.yaml keeps validating during import)
 CONF_UNIQUE_ID = "unique_id"
@@ -144,5 +154,6 @@ CSV_FIELDNAMES = [
     CONF_RELATIONSHIP_TYPE,
     CONF_PARENT_IDS,
     CONF_PARTNER_IDS,
+    CONF_PRIMARY_CONTACT_ID,
     CONF_ATTRIBUTES,
 ]

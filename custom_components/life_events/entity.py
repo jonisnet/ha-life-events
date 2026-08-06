@@ -178,6 +178,30 @@ class EventEntity(Entity):
             attrs["children_names"] = [child.name for child in children]
         if event.phone_number:
             attrs["phone_number"] = event.phone_number
+        # primary_phone_number/primary_contact_name/primary_whatsapp_link
+        # are always exposed when ANY number is resolvable (own or
+        # delegated), so an automation can point at primary_phone_number
+        # on any person's entity and get the right answer whether or not
+        # delegation is configured. Resolution re-checks primary_contact_id
+        # against the CURRENT spouse_id/parent_ids on every read (not just
+        # at set time) - see LifeEventsManager._validate_primary_contact_id
+        # for the set-time guard, and CONF_PRIMARY_CONTACT_ID in const.py
+        # for why staleness is handled here instead of proactively cleared.
+        if event.primary_contact_id:
+            attrs["primary_contact_id"] = event.primary_contact_id
+            valid_targets = set(event.parent_ids)
+            if event.spouse_id:
+                valid_targets.add(event.spouse_id)
+            if event.primary_contact_id in valid_targets:
+                delegate = self._manager.events.get(event.primary_contact_id)
+                if delegate and delegate.phone_number:
+                    attrs["primary_phone_number"] = delegate.phone_number
+                    attrs["primary_contact_name"] = delegate.name
+        if "primary_phone_number" not in attrs and event.phone_number:
+            attrs["primary_phone_number"] = event.phone_number
+            attrs["primary_contact_name"] = event.name
+        if attrs.get("primary_phone_number"):
+            attrs["primary_whatsapp_link"] = f"https://wa.me/{attrs['primary_phone_number'].lstrip('+')}"
         if event.time:
             attrs["time"] = event.time
         return attrs

@@ -158,5 +158,9 @@
   "relationship_type_option_relationship": "Relation",
   "registered_partnership_section_title": "Partenariat enregistré",
   "label_partner_of_bare": "Partenaire de {name}",
-  "label_anniversary_nickname": "Étape importante"
+  "label_anniversary_nickname": "Étape importante",
+  "primary_contact_section_title": "Contact principal",
+  "primary_contact_hint": "Quel numéro de téléphone utiliser pour les automatisations (par ex. WhatsApp) ?",
+  "primary_contact_self_option": "Soi-même",
+  "label_primary_contact_value": "{name} ({number})"
 }

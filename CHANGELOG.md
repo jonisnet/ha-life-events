@@ -4,6 +4,24 @@ All notable changes to Life Events are documented here. Development happens
 in beta releases (`0.0.x-beta.N`) between occasional real releases, where
 this file is consolidated into one summary per real version.
 
+## 0.0.4-beta.5
+
+### Added
+- **Primary contact delegation**: a person can now designate their linked
+  spouse/partner or a linked parent as their "primary contact" instead of
+  their own number - meant for a child who has their own phone number but
+  isn't who a household automation should actually message. Pick one via a
+  small row of buttons ("Zelf" plus each linked candidate) on the edit
+  form. Every person's entity now also exposes `primary_phone_number` /
+  `primary_contact_name` (resolving to the delegate if one is set and
+  valid, otherwise the person's own number - always populated when any
+  number is known, no delegation required) and a ready-made
+  `primary_whatsapp_link` (`https://wa.me/...`) for building a WhatsApp
+  deep-link straight from an automation. If a delegation later becomes
+  stale (the spouse link ends, the parent is unlinked or removed), it's
+  silently ignored and resolution falls back to the person's own number -
+  nothing needs to be manually cleared.
+
 ## 0.0.4-beta.4
 
 ### Added
