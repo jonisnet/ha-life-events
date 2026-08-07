@@ -209,11 +209,14 @@ which device(s) (running the Companion App) should receive it; title,
 message, and (when available) a "WhatsApp {name}" action button are all
 built automatically, using the newer relationship-type, couple's-
 anniversary, and primary-contact-delegation data - so a child's
-notification WhatsApps their parent instead, if that's how it's set up. A
-deceased person's actual remembrance day (not just their would-be
-birthday) is included too. It can also add a to-do item per event, and an
-optional extra action (with all the same data available as variables) for
-anything further you want to layer on top.
+notification WhatsApps their parent instead, if that's how it's set up.
+Tapping the notification itself opens WhatsApp too (falling back to the
+Life Events overview if no number is known), and a second button always
+jumps to that overview directly. A deceased person's actual remembrance
+day (not just their would-be birthday) is included too. It can also add a
+to-do item per event, and an optional extra action (with all the same
+data available as variables) for anything further you want to layer on
+top.
 
 Import it via **Settings → Automations → ⋮ → Import blueprint**, pasting:
 

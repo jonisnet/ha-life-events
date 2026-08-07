@@ -10,7 +10,10 @@ blueprint:
     including relationship type (getrouwd/geregistreerd partnerschap/
     relatie), a couple's own anniversary entity, and the primary-contact
     delegation (so a child's notification WhatsApps their parent instead,
-    if that's how it's set up).
+    if that's how it's set up). Tapping the notification itself opens
+    WhatsApp too (falling back to the Life Events overview if no number
+    is known); a second "Ga naar verjaardagen" button always jumps to
+    that overview instead.
 
     No separate helper sensor is needed: this reads the `life_events.*`
     entities directly (state 0 = happening today; a deceased person's
@@ -171,8 +174,8 @@ action:
                   title: "{{ notification_title | trim }}"
                   message: "{{ notification_message | trim }}"
                   data:
-                    actions: >-
-                      {{ [{'action': 'URI', 'title': '💬 WhatsApp ' ~ primary_contact_name, 'uri': primary_whatsapp_link}] if primary_whatsapp_link else [] }}
+                    clickAction: "{{ primary_whatsapp_link if primary_whatsapp_link else '/sub-dash/verjaar' }}"
+                    actions: "{{ ([{'action': 'URI', 'title': '💬 WhatsApp ' ~ primary_contact_name, 'uri': primary_whatsapp_link}] if primary_whatsapp_link else []) + [{'action': 'URI', 'title': 'Ga naar verjaardagen', 'uri': '/sub-dash/verjaar'}] }}"
         - choose:
             - conditions: []
               sequence: !input extra_action
