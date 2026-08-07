@@ -2363,7 +2363,7 @@
             .bd-left { display: flex; align-items: center; gap: 12px; }
             .bd-name { font-weight: 500; }
             .bd-secondary { font-size: 12px; color: var(--secondary-text-color); }
-            .bd-badge { background: var(--primary-color); color: var(--text-primary-color, #fff); border-radius: 12px; padding: 2px 10px; font-size: 12px; font-weight: 600; min-width: 24px; text-align: center; }
+            .bd-badge { background: var(--primary-color); color: var(--text-primary-color, #fff); border-radius: 12px; padding: 2px 10px; font-size: 12px; font-weight: 600; min-width: 24px; text-align: center; flex-shrink: 0; white-space: nowrap; }
             .bd-months { display: grid; grid-template-columns: repeat(${this._config.columns || 3}, 1fr); gap: 6px; margin-bottom: 12px; }
             .bd-month-btn { padding: 8px 4px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; background: var(--secondary-background-color); color: var(--primary-text-color); }
             .bd-month-btn.selected { background: var(--primary-color); color: var(--text-primary-color, #fff); }
