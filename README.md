@@ -203,11 +203,17 @@ automation:
 
 `blueprints/automation/jonisnet/notify_todays_events.yaml` runs once a day,
 finds every event happening that day (for the event types you pick), and
-runs your own notification action per person — no separate helper sensor
-needed. Available variables in your notification action: `person_name`,
-`entity_id`, `event_type`, `age`, `phone_number` (E.164), `phone_number_wa`
-(same number without the leading `+`, e.g. for a `https://wa.me/` link).
-It can also add a to-do item per event, if you configure a to-do list.
+sends a ready-made notification for each one — no separate helper sensor
+needed, and nothing to build yourself. The only thing you configure is
+which device(s) (running the Companion App) should receive it; title,
+message, and (when available) a "WhatsApp {name}" action button are all
+built automatically, using the newer relationship-type, couple's-
+anniversary, and primary-contact-delegation data - so a child's
+notification WhatsApps their parent instead, if that's how it's set up. A
+deceased person's actual remembrance day (not just their would-be
+birthday) is included too. It can also add a to-do item per event, and an
+optional extra action (with all the same data available as variables) for
+anything further you want to layer on top.
 
 Import it via **Settings → Automations → ⋮ → Import blueprint**, pasting:
 

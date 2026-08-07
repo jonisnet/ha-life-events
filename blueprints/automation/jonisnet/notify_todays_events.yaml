@@ -1,12 +1,22 @@
 blueprint:
   name: Life Events - Daily notification
   description: >-
-    Runs once a day and finds every Life Events entity (birthday, anniversary,
-    ...) whose next occurrence is today, then runs your notification
-    action(s) for each one - plus, optionally, adds a to-do item.
+    Runs once a day and sends a ready-made notification for every Life
+    Events entity (birthday, anniversary, deceased remembrance, ...) whose
+    next occurrence is today - plus, optionally, adds a to-do item. All you
+    need to configure is which device(s) to notify; the title, message,
+    and (when available) a "WhatsApp {name}" action button on the
+    notification are all built automatically from the event's own data -
+    including relationship type (getrouwd/geregistreerd partnerschap/
+    relatie), a couple's own anniversary entity, and the primary-contact
+    delegation (so a child's notification WhatsApps their parent instead,
+    if that's how it's set up).
 
     No separate helper sensor is needed: this reads the `life_events.*`
-    entities directly (state 0 = happening today).
+    entities directly (state 0 = happening today; a deceased person's
+    death-anniversary date is checked separately from their birth date, so
+    both occasions are caught even though they're not the entity's main
+    state).
   domain: automation
   source_url: https://github.com/jonisnet/ha-life-events/blob/master/blueprints/automation/jonisnet/notify_todays_events.yaml
   input:
@@ -33,6 +43,17 @@ blueprint:
               value: anniversary
             - label: Deceased
               value: deceased
+    notify_devices:
+      name: Devices to notify
+      description: >-
+        The only thing you actually need to pick: which phone(s)/tablet(s)
+        (running the HA Companion App) should receive the notification.
+        Everything else is built automatically.
+      selector:
+        device:
+          filter:
+            integration: mobile_app
+          multiple: true
     todo_list:
       name: To-do list (optional)
       description: If set, adds a to-do item for each matching event today.
@@ -40,16 +61,27 @@ blueprint:
       selector:
         entity:
           domain: todo
-    notify_action:
-      name: Notification action(s)
+    extra_action:
+      name: Extra action(s) (optional)
       description: >-
-        What to do for each matching event, run once per person. Available
-        variables: `person_name`, `entity_id`, `event_type`, `age` (years,
-        set for birthday/anniversary), `phone_number` (E.164, e.g.
-        +31612345678 - only set if filled in on the event, and only for
-        birthday/anniversary events), `phone_number_wa` (same number
-        without the leading "+", ready to use in a
-        `https://wa.me/{{ phone_number_wa }}` link).
+        Optional extra thing(s) to do for each matching event, on top of
+        the automatic notification above (e.g. flash a light) - run once
+        per person/occasion. Available variables: `person_name`,
+        `entity_id`, `event_type`, `occasion` (`birthday`,
+        `death_anniversary`, or `anniversary`), `age` (years, when known),
+        `is_couple` (true for a couple's own anniversary entity),
+        `relationship_type` (`married`/`registered_partnership`/
+        `relationship`, set for a couple's anniversary or a living
+        person's own married-to-someone-else info), `years_since_death`
+        (set for a `death_anniversary` occasion), `phone_number` (E.164,
+        the person's own number if set), `primary_phone_number` /
+        `primary_contact_name` (who the notification's WhatsApp button
+        actually messages - the person themself unless delegated to a
+        parent/partner), `primary_whatsapp_link` (`https://wa.me/...`,
+        ready to use), `notification_title`, `notification_message` (the
+        same text the automatic notification above uses, in case you want
+        to reuse it elsewhere).
+      default: []
       selector:
         action: {}
 
@@ -61,25 +93,65 @@ action:
   - variables:
       allowed_types: !input event_types
       todo_list: !input todo_list
+      notify_devices: !input notify_devices
   - variables:
-      todays_entities: >-
+      # Each match is {entity_id, occasion} - occasion distinguishes a
+      # deceased person's birth-date recurrence from their separate
+      # death-anniversary date (see entity.py's days_until_death_anniversary),
+      # since only the birth date drives the entity's own `state`.
+      todays_occasions: >-
         {% set ns = namespace(matches=[]) %}
         {% for s in states.life_events %}
-          {% if s.state == '0' and s.attributes.get('event_type') in allowed_types %}
-            {% set ns.matches = ns.matches + [s.entity_id] %}
+          {% set et = s.attributes.get('event_type') %}
+          {% if et in allowed_types %}
+            {% if s.state == '0' %}
+              {% set ns.matches = ns.matches + [{'entity_id': s.entity_id, 'occasion': 'anniversary' if et == 'anniversary' else 'birthday'}] %}
+            {% endif %}
+            {% if et == 'deceased' and s.attributes.get('days_until_death_anniversary') == 0 %}
+              {% set ns.matches = ns.matches + [{'entity_id': s.entity_id, 'occasion': 'death_anniversary'}] %}
+            {% endif %}
           {% endif %}
         {% endfor %}
         {{ ns.matches }}
   - repeat:
-      for_each: "{{ todays_entities }}"
+      for_each: "{{ todays_occasions }}"
       sequence:
         - variables:
-            entity_id: "{{ repeat.item }}"
-            person_name: "{{ state_attr(repeat.item, 'friendly_name') }}"
-            event_type: "{{ state_attr(repeat.item, 'event_type') }}"
-            age: "{{ state_attr(repeat.item, 'age_at_next_birthday') }}"
-            phone_number: "{{ state_attr(repeat.item, 'phone_number') }}"
-            phone_number_wa: "{{ (state_attr(repeat.item, 'phone_number') or '') | replace('+', '') }}"
+            entity_id: "{{ repeat.item.entity_id }}"
+            occasion: "{{ repeat.item.occasion }}"
+            person_name: "{{ state_attr(repeat.item.entity_id, 'friendly_name') }}"
+            event_type: "{{ state_attr(repeat.item.entity_id, 'event_type') }}"
+            age: "{{ state_attr(repeat.item.entity_id, 'age_at_next_birthday') }}"
+            relationship_type: "{{ state_attr(repeat.item.entity_id, 'relationship_type') }}"
+            is_couple: "{{ (state_attr(repeat.item.entity_id, 'partner_ids') or []) | length == 2 }}"
+            years_since_death: "{{ state_attr(repeat.item.entity_id, 'years_since_death') }}"
+            phone_number: "{{ state_attr(repeat.item.entity_id, 'phone_number') }}"
+            primary_phone_number: "{{ state_attr(repeat.item.entity_id, 'primary_phone_number') }}"
+            primary_contact_name: "{{ state_attr(repeat.item.entity_id, 'primary_contact_name') }}"
+            primary_whatsapp_link: "{{ state_attr(repeat.item.entity_id, 'primary_whatsapp_link') }}"
+        - variables:
+            notification_title: >-
+              {% if occasion == 'death_anniversary' %}
+                🕯️ In herinnering
+              {% elif occasion == 'anniversary' and relationship_type == 'married' %}
+                💍 Jubileum!
+              {% elif occasion == 'anniversary' and relationship_type == 'registered_partnership' %}
+                📜 Jubileum partnerschap!
+              {% elif occasion == 'anniversary' %}
+                ❤️ Jubileum!
+              {% else %}
+                🎂 Verjaardag!
+              {% endif %}
+            notification_message: >-
+              {% if occasion == 'death_anniversary' %}
+                Het is vandaag {{ years_since_death }} jaar geleden dat {{ person_name }} overleed.
+              {% elif occasion == 'anniversary' %}
+                {{ person_name }} vieren vandaag hun {{ age }}e {{ 'huwelijksverjaardag' if relationship_type == 'married' else 'jubileum' }}!
+              {% elif age is not none %}
+                {{ person_name }} wordt vandaag {{ age }}!
+              {% else %}
+                {{ person_name }} is vandaag jarig!
+              {% endif %}
         - if:
             - condition: template
               value_template: "{{ todo_list not in (None, '') }}"
@@ -88,11 +160,21 @@ action:
               target:
                 entity_id: "{{ todo_list }}"
               data:
-                item: "{{ 'Jubileum' if event_type == 'anniversary' else 'Verjaardag' }}"
-                description: >-
-                  {{ person_name }} {{ 'jubileum vandaag' if event_type == 'anniversary' else 'is jarig' }}
+                item: >-
+                  {{ {'birthday': 'Verjaardag', 'anniversary': 'Jubileum', 'death_anniversary': 'In herinnering'}[occasion] }}
+                description: "{{ notification_message | trim }}"
+        - repeat:
+            for_each: "{{ notify_devices }}"
+            sequence:
+              - action: "{{ 'notify.mobile_app_' ~ (device_attr(repeat.item, 'name') | slugify) }}"
+                data:
+                  title: "{{ notification_title | trim }}"
+                  message: "{{ notification_message | trim }}"
+                  data:
+                    actions: >-
+                      {{ [{'action': 'URI', 'title': '💬 WhatsApp ' ~ primary_contact_name, 'uri': primary_whatsapp_link}] if primary_whatsapp_link else [] }}
         - choose:
             - conditions: []
-              sequence: !input notify_action
+              sequence: !input extra_action
 
 mode: single
