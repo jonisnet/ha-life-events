@@ -81,7 +81,11 @@ blueprint:
         `primary_contact_name` (who the notification's WhatsApp button
         actually messages - the person themself unless delegated to a
         parent/partner), `primary_whatsapp_link` (`https://wa.me/...`,
-        ready to use), `notification_title`, `notification_message` (the
+        opens fine in a browser but gets intercepted by the Companion
+        App's own in-app browser if used as a notification click/action
+        URI - use `primary_whatsapp_intent` instead for that, an
+        `intent://...` URI that forces Android to hand off to the actual
+        WhatsApp app), `notification_title`, `notification_message` (the
         same text the automatic notification above uses, in case you want
         to reuse it elsewhere).
       default: []
@@ -132,6 +136,10 @@ action:
             primary_phone_number: "{{ state_attr(repeat.item.entity_id, 'primary_phone_number') }}"
             primary_contact_name: "{{ state_attr(repeat.item.entity_id, 'primary_contact_name') }}"
             primary_whatsapp_link: "{{ state_attr(repeat.item.entity_id, 'primary_whatsapp_link') }}"
+            # The Android Companion App opens a plain https://wa.me/... clickAction/action
+            # URI inside its own in-app browser instead of handing off to the WhatsApp app -
+            # an intent:// URI with an explicit package forces the OS to launch WhatsApp itself.
+            primary_whatsapp_intent: "{{ ('intent://send?phone=' ~ primary_whatsapp_link.split('/')[-1] ~ '#Intent;scheme=whatsapp;package=com.whatsapp;end') if primary_whatsapp_link else none }}"
         - variables:
             notification_title: >-
               {% if occasion == 'death_anniversary' %}
@@ -174,8 +182,8 @@ action:
                   title: "{{ notification_title | trim }}"
                   message: "{{ notification_message | trim }}"
                   data:
-                    clickAction: "{{ primary_whatsapp_link if primary_whatsapp_link else '/sub-dash/verjaar' }}"
-                    actions: "{{ ([{'action': 'URI', 'title': '💬 WhatsApp ' ~ primary_contact_name, 'uri': primary_whatsapp_link}] if primary_whatsapp_link else []) + [{'action': 'URI', 'title': 'Ga naar verjaardagen', 'uri': '/sub-dash/verjaar'}] }}"
+                    clickAction: "{{ primary_whatsapp_intent if primary_whatsapp_intent else '/sub-dash/verjaar' }}"
+                    actions: "{{ ([{'action': 'URI', 'title': '💬 WhatsApp ' ~ primary_contact_name, 'uri': primary_whatsapp_intent}] if primary_whatsapp_intent else []) + [{'action': 'URI', 'title': 'Ga naar verjaardagen', 'uri': '/sub-dash/verjaar'}] }}"
         - choose:
             - conditions: []
               sequence: !input extra_action
