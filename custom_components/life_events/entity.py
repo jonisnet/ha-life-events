@@ -8,6 +8,26 @@ from homeassistant.util import dt as dt_util
 
 from .const import CONF_AGE_AT_NEXT_BIRTHDAY, CONF_DATE_OF_BIRTH, DOMAIN, DOMAIN_FRIENDLY_NAME, EVENT_TYPE_DECEASED
 
+# Attribute name used by everyone's existing data from before this
+# integration had its own phone_number field - the original ha-birthdays
+# integration only supported freeform custom attributes, so every number
+# already on file lives here instead. Treated as equivalent to the real
+# phone_number field everywhere a number is resolved, so nobody has to
+# re-enter 114 phone numbers by hand; the real field still wins if both
+# are somehow set.
+LEGACY_PHONE_NUMBER_ATTR = "nummer"
+
+
+def _effective_phone_number(event) -> str | None:
+    """Resolve event.phone_number, falling back to the legacy attribute."""
+    if event.phone_number:
+        return event.phone_number
+    legacy = event.attributes.get(LEGACY_PHONE_NUMBER_ATTR)
+    if not legacy:
+        return None
+    legacy = legacy.strip()
+    return legacy if legacy.startswith("+") else f"+{legacy}"
+
 
 @callback
 def apply_life_events_label(hass: HomeAssistant, entity_id: str) -> None:
@@ -145,8 +165,9 @@ class EventEntity(Entity):
                 parent = self._manager.events.get(parent_id)
                 if parent:
                     parent_names.append(parent.name)
-                    if parent.phone_number:
-                        parent_phone_numbers.append({"name": parent.name, "phone_number": parent.phone_number})
+                    parent_phone_number = _effective_phone_number(parent)
+                    if parent_phone_number:
+                        parent_phone_numbers.append({"name": parent.name, "phone_number": parent_phone_number})
             if parent_names:
                 attrs["parent_names"] = parent_names
             if parent_phone_numbers:
@@ -176,8 +197,9 @@ class EventEntity(Entity):
         if children:
             attrs["children_ids"] = [child.id for child in children]
             attrs["children_names"] = [child.name for child in children]
-        if event.phone_number:
-            attrs["phone_number"] = event.phone_number
+        own_phone_number = _effective_phone_number(event)
+        if own_phone_number:
+            attrs["phone_number"] = own_phone_number
         # primary_phone_number/primary_contact_name/primary_whatsapp_link
         # are always exposed when ANY number is resolvable (own or
         # delegated), so an automation can point at primary_phone_number
@@ -194,11 +216,12 @@ class EventEntity(Entity):
                 valid_targets.add(event.spouse_id)
             if event.primary_contact_id in valid_targets:
                 delegate = self._manager.events.get(event.primary_contact_id)
-                if delegate and delegate.phone_number:
-                    attrs["primary_phone_number"] = delegate.phone_number
+                delegate_phone_number = _effective_phone_number(delegate) if delegate else None
+                if delegate_phone_number:
+                    attrs["primary_phone_number"] = delegate_phone_number
                     attrs["primary_contact_name"] = delegate.name
-        if "primary_phone_number" not in attrs and event.phone_number:
-            attrs["primary_phone_number"] = event.phone_number
+        if "primary_phone_number" not in attrs and own_phone_number:
+            attrs["primary_phone_number"] = own_phone_number
             attrs["primary_contact_name"] = event.name
         if attrs.get("primary_phone_number"):
             attrs["primary_whatsapp_link"] = f"https://wa.me/{attrs['primary_phone_number'].lstrip('+')}"
