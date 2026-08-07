@@ -1,154 +1,89 @@
 # Changelog
 
 All notable changes to Life Events are documented here. Development happens
-in beta releases (`0.0.x-beta.N`) between occasional real releases, where
+in beta releases (`X.Y.Z-beta.N`) between occasional real releases, where
 this file is consolidated into one summary per real version.
 
-## 0.0.4-beta.7
+## 1.0.0
 
-### Added
-- **Parents can now be shown as a plain name list instead of phone
-  numbers**: the always-on "Telefoon van X" rows are now opt-in via a new
-  "Toon telefoonnummer van ouders" switch on the Upcoming/Month cards'
-  visual editor (off by default). With it off, linked parents show the
-  same way children already do - a clickable name list, covering every
-  linked parent regardless of whether they have a number set - since
-  automations should now use the primary-contact number instead (see
-  beta.5).
-- **Spouse/partner, parent, and child names in the details popup are now
-  clickable**, jumping straight to that person's own record. A "‹" back
-  button appears in the popup header whenever you've navigated this way,
-  returning to wherever you came from; opening a popup fresh from the
-  card's own list clears that history.
-
-## 0.0.4-beta.6
-
-### Changed
-- **Primary contact is now visible in the overview, not just the details
-  popup**: when a person's primary contact is delegated to someone else,
-  the Upcoming card's row and the Manage card's list row both now show
-  who it is and their number, at a glance - no need to open the popup to
-  check.
-- **The primary-contact picker's selected button now stands out more
-  clearly**: the chosen option (e.g. "Zelf" or a parent's name) reads
-  normally, while every other option is struck through to show it's not
-  currently active.
-
-## 0.0.4-beta.5
-
-### Added
-- **Primary contact delegation**: a person can now designate their linked
-  spouse/partner or a linked parent as their "primary contact" instead of
-  their own number - meant for a child who has their own phone number but
-  isn't who a household automation should actually message. Pick one via a
-  small row of buttons ("Zelf" plus each linked candidate) on the edit
-  form. Every person's entity now also exposes `primary_phone_number` /
-  `primary_contact_name` (resolving to the delegate if one is set and
-  valid, otherwise the person's own number - always populated when any
-  number is known, no delegation required) and a ready-made
-  `primary_whatsapp_link` (`https://wa.me/...`) for building a WhatsApp
-  deep-link straight from an automation. If a delegation later becomes
-  stale (the spouse link ends, the parent is unlinked or removed), it's
-  silently ignored and resolution falls back to the person's own number -
-  nothing needs to be manually cleared.
-
-## 0.0.4-beta.4
+First **1.0.0** release - the integration is now considered stable and
+ready for regular use, rather than still finding its shape in `0.0.x`.
+Consolidates the entire `0.0.4-beta.1` through `0.0.4-beta.7` line (all
+those intermediate tags/releases have been removed - see `0.0.1`/`0.0.3`
+below for why this project consolidates rather than keeping every beta
+entry forever).
 
 ### Added
 - **Multiple relationship types**: "Getrouwd" is now one of three choices -
   Getrouwd (married), Geregistreerd partnerschap (registered partnership),
-  or Relatie (relationship) - replacing the earlier married/not-married
-  checkbox with a proper 3-way picker. An informal "Relatie" link with no
-  known date now shows no date-related text at all (not even "datum
-  onbekend"), since a precise start date usually isn't the point for that
-  kind of relationship.
-- **A couple's anniversary is now a real, independent entity**, not just a
-  computed row shown inside the cards. Linking two people with a known
-  date creates a genuine `life_events.*` entity for their anniversary -
-  visible under Settings → Entities, usable in automations, with its own
-  working countdown. It's kept in sync automatically (created when a date
-  becomes known, updated when the date changes, removed on unlinking or
-  when either partner is removed) and is read-only/delete-only in the
-  cards, since editing its date directly would desync it from the two
-  partners' own records.
-
-### Changed
-- **If a card's `event_types` config is set to something like `[birthday]`
-  (hiding anniversaries), a linked couple's anniversary will no longer
-  show up on it** - previously it always appeared regardless of that
-  filter, since it wasn't a real, independently-typed entity yet. Add
-  `anniversary` to a card's `event_types` list if you want couples'
-  anniversaries to keep showing there.
-
-## 0.0.4-beta.3
-
-### Added
-- **"Children of X" on a parent's own record**: as soon as a parent is
-  linked to a child, the parent's own details popup now shows a
-  "Kinderen" row listing them back - computed live, updates immediately
-  when a link is added, changed, or removed (no separate "children" field
-  to maintain, it's the reverse of the child's own linked parents).
-
-### Fixed
-- **Searchable dropdowns (parent/spouse/phone-country pickers) could get
-  clipped halfway** when the combobox sat low in a long edit popup - the
-  list now flips upward and caps its own height to whatever room actually
-  exists, instead of always opening downward with a fixed height that
-  could run past the popup's edge.
-
-## 0.0.4-beta.2
-
-### Added
-- **Unmarried partners**: linking two people no longer has to mean a
-  wedding - a new "Dit is een huwelijk" checkbox on the link mini-form
-  (checked by default, so every existing link stays a marriage unchanged)
-  lets you record a partnership without one. Cards, wording, and the
-  wedding-anniversary nicknames (zilveren bruiloft, etc.) all adapt - an
-  unmarried partnership shows a plain "X jaar samen" instead.
-- **Marriage/partnership date is now optional**: not everyone's exact
-  anniversary date is known. Linking without one now asks for confirmation
-  first, then records the link anyway - the couple/partners show up
-  correctly everywhere, just without an anniversary occasion until the
-  date is filled in later (a new "Datum toevoegen" action appears on their
-  record for exactly that).
+  or Relatie (relationship). An informal "Relatie" link with no known date
+  shows no date-related text at all (not even "datum onbekend"), since a
+  precise start date usually isn't the point for that kind of relationship.
+- **A couple's anniversary is now a real, independent entity**, not a
+  computed row inside the cards - visible under Settings → Entities, usable
+  in automations, with its own working countdown. Created when a date
+  becomes known, updated when it changes, removed on unlinking or when
+  either partner is removed; read-only/delete-only in the cards (editing
+  its date directly would desync it from the two partners' own records).
+  A card's `event_types` filter now applies to it like any other
+  independently-typed entity - add `anniversary` to the list if a card
+  should keep showing couples' anniversaries.
+- **Unmarried partners and an optional marriage/partnership date**: linking
+  two people no longer has to mean a wedding with a known date. Cards,
+  wording, and the wedding-anniversary nicknames (zilveren bruiloft, etc.)
+  all adapt - an unmarried partnership shows a plain "X jaar samen"
+  instead. A "Datum toevoegen" action appears on the record once the date
+  is known but wasn't at link time.
 - **Parent-child linking**: any person can be linked to up to 2 parents
-  (optional, not required to match) via two new searchable pickers on the
-  edit form - unlike the spouse picker, any person can be a parent
-  regardless of type, so a deceased grandparent can be linked too.
-- **Phone number of linked parents**: a person's details popup now shows
-  the phone number of each linked parent that has one set, resolved live -
-  this is what originally motivated the parent-linking feature: seeing a
-  child's parents' phone numbers without re-entering them.
-
-## 0.0.4-beta.1
+  (optional, no type restriction - a deceased grandparent can be linked
+  too) via searchable pickers on the edit form. A parent's own record
+  automatically shows a "Kinderen" row listing their linked children back
+  (the reverse of the child's own parent links, computed live).
+- **Primary contact delegation for automations**: a person can designate
+  their linked spouse/partner or a linked parent as their "primary
+  contact" instead of their own number - meant for a child who has their
+  own phone number but isn't who a household automation should actually
+  message. Pick one via a row of buttons ("Zelf" plus each linked
+  candidate, the active choice clearly highlighted) on the edit form, and
+  see who it's delegated to right in the Upcoming/Manage overview, not
+  just the details popup. Every person's entity exposes
+  `primary_phone_number` / `primary_contact_name` (resolving to the
+  delegate if one is validly set, otherwise the person's own number -
+  always populated when any number is known) and a ready-made
+  `primary_whatsapp_link` (`https://wa.me/...`) for a WhatsApp deep-link
+  straight from an automation. A delegation that later becomes stale (the
+  spouse link ends, the parent is unlinked or removed) is silently ignored
+  and resolution falls back to the person's own number automatically.
+- **Linked-person phone numbers are shown two ways**: a parent's own
+  phone number is off by default (a plain clickable name list instead,
+  like children already show) but can be switched back on per-card via
+  "Toon telefoonnummer van ouders" in the Upcoming/Month editors - now
+  that primary-contact delegation covers the original automation use case.
+- **Clickable cross-navigation**: spouse/partner, parent, and child names
+  in the details popup jump straight to that person's own record, with a
+  "‹" back button to return to wherever you came from.
+- **Composable date-format picker**: 4 independent controls (weekday
+  on/off, month as digits or name, day-first or month-first order, year
+  on/off) covering the full spectrum from `dd-mm-yyyy` to
+  `dddd dd mmmm yyyy` and everything in between.
 
 ### Fixed
-- **Entity deletion left orphaned registry entries**: deleting an event (or
-  replacing it during an import) only cleared its state, not its entity
-  registry entry, leaving HA's "this entity is no longer provided" warning
-  behind. Now uses the entity registry's own removal path, which also
-  cleans up the state as a side effect.
-- **Spouse-select dropdown was unsorted**: the marriage-linking picker now
-  lists candidates alphabetically, and both it and the phone country picker
-  are now a searchable combobox (type to filter) instead of a plain
-  dropdown/`<select>`.
-- **Marriage attributes leaked untranslated into the custom-attributes
-  list**: `spouse_naam`-style raw attribute names no longer show up as
-  generic rows; a married person's details popup now shows one friendly,
-  translated "Getrouwd met ... sinds ..." line instead. The same fix also
-  covers two previously-leaking deceased-related attributes
-  (`years_since_death`, `days_until_death_anniversary`).
-- **Phone country field overflowed the popup**: the country selector is
-  now a narrow, fixed-width searchable combobox showing just the dial code
-  (e.g. `+31`) once chosen, so the phone number field next to it no longer
-  gets pushed outside the popup.
-
-### Added
-- **Composable date-format picker**: the old 3 fixed presets (short/medium/
-  long) are replaced with 4 independent controls - weekday on/off, month as
-  digits or name, day-first or month-first order, year on/off - covering
-  the full spectrum from `dd-mm-yyyy` to `dddd dd mmmm yyyy` and everything
-  in between. Existing configs keep working unchanged.
+- **Entity deletion left orphaned registry entries**, showing HA's "this
+  entity is no longer provided" warning after a delete or an import
+  replace - now uses the entity registry's own removal path.
+- **Spouse-select and phone-country pickers** are now sorted, searchable
+  comboboxes instead of a plain unsorted dropdown, and no longer overflow
+  the popup or get clipped halfway when the combobox sits low in a long
+  form.
+- **Marriage- and deceased-related attributes leaked untranslated into the
+  generic custom-attributes list** - they now show as one friendly,
+  translated line each instead.
+- **`update_event` could wrongly reject an unrelated update** if it
+  happened to invalidate an existing, untouched primary-contact delegation
+  (e.g. clearing a person's linked parents while their primary contact
+  still pointed at the one being removed) - that staleness is now purely
+  handled by read-time resolution falling back to the person's own number,
+  never by rejecting the write.
 
 ## 0.0.3
 
