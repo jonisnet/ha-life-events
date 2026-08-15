@@ -4,6 +4,53 @@ All notable changes to Life Events are documented here. Development happens
 in beta releases (`X.Y.Z-beta.N`) between occasional real releases, where
 this file is consolidated into one summary per real version.
 
+## 1.0.1
+
+### Fixed
+- **The card sometimes needing a hard refresh to load, especially after a
+  Home Assistant restart.** This integration only ever registered its card
+  via the older `add_extra_js_url` injection method, which is known to get
+  "stuck" on an already-open tab or a mistimed restart until a manual hard
+  refresh. It now registers as a real Lovelace resource (the same
+  mechanism the "Add Resource" dialog and most HACS plugin repos use)
+  whenever possible, falling back to `add_extra_js_url` only when that
+  isn't available (e.g. YAML-mode dashboards). `manifest.json` also now
+  declares `lovelace` as an `after_dependencies` entry, so this
+  integration's own setup can no longer race ahead of Lovelace finishing
+  its resource storage load at startup.
+- **The card JS is now served with `Cache-Control: no-store`**, closing
+  the remaining gap where a tab left open for days (a kiosk tablet, a
+  phone tab never closed) would never re-request the file at all.
+- **Tapping a notification opened Home Assistant instead of WhatsApp.**
+  The blueprint's `data.actions` only covered the explicit action button;
+  without `data.clickAction` the notification body itself fell back to the
+  Companion App's default. Also added a dedicated "Ga naar verjaardagen"
+  button pointing at the dashboard.
+- **The WhatsApp deep link opened inside the Companion App's in-app
+  browser instead of handing off to WhatsApp itself**, confirmed live on
+  Android. Switched to an `intent://` URI that explicitly targets the
+  `com.whatsapp` package.
+- **Phone numbers weren't resolved for anyone migrated from the original
+  ha-birthdays YAML config**, since those records store the number in a
+  freeform legacy `nummer` custom attribute rather than the newer
+  structured `phone_number` field. `primary_phone_number`/
+  `primary_whatsapp_link` resolution now falls back to `nummer` when
+  `phone_number` isn't set.
+- **The "Vandaag!" badge could overflow its pill** on the Upcoming card
+  when the row's name/date text was long enough to squeeze it - the badge
+  now keeps its own space (`flex-shrink: 0`) instead of being compressed
+  by its flex siblings.
+
+### Changed
+- **The notification blueprint now builds a complete, ready-to-send
+  notification automatically** instead of handing over raw template
+  variables and expecting a fully custom notify action to be built from
+  scratch every install. The only required input is now a device picker;
+  title/message/WhatsApp button are all generated per occasion (birthday,
+  couple's anniversary with relationship-type-aware wording, death
+  remembrance), with the old manual `notify_action` still available as an
+  optional `extra_action` for anyone who wants to layer something on top.
+
 ## 1.0.0
 
 First **1.0.0** release - the integration is now considered stable and

@@ -29,6 +29,7 @@ from homeassistant.helpers.http import HomeAssistantView
 from homeassistant.loader import async_get_integration
 
 from .const import CONF_ATTRIBUTES, CONF_BIRTHDAYS, CONF_GLOBAL_CONFIG, DOMAIN, LEGACY_YAML_KEY
+from .frontend import LovelaceResourceRegistration
 from .manager import LifeEventsManager
 from .services import async_register_services, async_unregister_services
 
@@ -182,21 +183,28 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
 
     www_path = Path(__file__).parent / "www"
     integration = await async_get_integration(hass, DOMAIN)
-    # Still cache-busted on the integration version too, as a second line of
-    # defense (some intermediate proxy/CDN setups only honor a changed URL,
-    # not response headers) - but the no-store header below is what actually
-    # closes the "already-open tab never re-fetches" gap.
-    js_url = f"{FRONTEND_URL_BASE}/{CARD_FILENAME}?v={integration.version}"
+    js_path = f"{FRONTEND_URL_BASE}/{CARD_FILENAME}"
 
     hass.http.register_view(_LifeEventsStaticView(www_path))
 
-    add_extra_js_url = None
-    try:
-        from homeassistant.components.frontend import add_extra_js_url
-    except ImportError:
-        add_extra_js_url = None
+    # Prefer registering as a real Lovelace resource - only fall back to the
+    # always-works-but-cache-flaky add_extra_js_url injection if that isn't
+    # possible right now (e.g. YAML-mode dashboards).
+    registered_as_resource = await LovelaceResourceRegistration(hass, js_path).async_try_register(
+        integration.version
+    )
 
-    if add_extra_js_url is not None:
-        add_extra_js_url(hass, js_url)
+    if not registered_as_resource:
+        js_url = f"{js_path}?v={integration.version}"
+        try:
+            from homeassistant.components.frontend import add_extra_js_url
 
-    _LOGGER.info("Life Events cards served at %s (add them as Lovelace resources if not auto-loaded)", js_url)
+            add_extra_js_url(hass, js_url)
+        except ImportError:
+            pass
+
+    _LOGGER.info(
+        "Life Events cards served at %s (registered as a Lovelace resource: %s)",
+        js_path,
+        registered_as_resource,
+    )
