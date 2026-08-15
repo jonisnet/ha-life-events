@@ -2,6 +2,7 @@
 
 # Life Events
 
+[![Sponsor](https://img.shields.io/badge/sponsor-ea4aaa?style=flat-square&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/jonisnet)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=flat-square&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/jonisnet)
 
 > **⚠️ Beta.** This project is a rename/continuation of [ha-birthdays](https://github.com/jonisnet/ha-birthdays)
@@ -235,3 +236,12 @@ Manage below.
 To use it: **Settings → Dashboards → + Add dashboard → New dashboard from
 scratch**, then open its **⋮ → Edit in YAML** and paste the contents of that
 file (or copy just the `cards:` block into an existing view).
+
+---
+
+## Sponsor
+
+This integration is free and maintained in my spare time. If it's useful to you, a small contribution is very welcome and appreciated:
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/jonisnet)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/jonisnet)
