@@ -47,7 +47,45 @@
   // Bump alongside manifest.json's version. Check this in the browser
   // console after an update to confirm the fresh file actually loaded,
   // rather than a stale cached copy - see CHANGELOG 1.0.0-beta.4.
-  console.info("Life Events cards: v1.0.1 loaded");
+  console.info("Life Events cards: v1.0.2 loaded");
+
+  // HA's frontend installs a scoped-custom-element-registry polyfill during boot, replacing
+  // window.customElements. When this resource module evaluates before that swap (a cold-load
+  // eval-order race - DevTools being open changes timing enough to hide it locally), our
+  // elements register into the *native* registry, which the polyfill's get()/whenDefined() then
+  // never sees: every card renders "Configuration error: Custom element doesn't exist"
+  // (home-assistant/frontend#52960). A normal F5 doesn't reliably dodge the race (same cache/
+  // eval-order conditions can repeat); Ctrl+Shift+R often "fixes" it only because bypassing the
+  // cache happens to shift the timing, not because it addresses the actual cause.
+  //
+  // Fix (community-diagnosed and verified fix for this exact HA regression, upstream issue
+  // above): define immediately as before, then re-verify once whenDefined('home-assistant')
+  // resolves on the registry we loaded against - HA installs the polyfill before defining its
+  // own elements, and the polyfill's own defines land back on the native registry for the
+  // browser to actually upgrade anything, so this signal reliably resolves after the danger
+  // zone on both sides of the race. A 5s fallback timer covers the (unexpected) case where that
+  // signal itself doesn't fire. Reference implementation: benct/lovelace-multiple-entity-row
+  // src/lib/define.js (MIT, adapted here).
+  const DEFINE_FALLBACK_DELAY_MS = 5000;
+
+  function _healElementDefine(name, ctor, via) {
+    if (customElements.get(name)) return;
+    try {
+      customElements.define(name, ctor);
+      console.info(`Life Events: re-defined ${name} after customElements registry swap, caught by ${via} (frontend#52960)`);
+    } catch (e) {
+      console.warn(`Life Events: re-defining ${name} after registry swap failed (${via})`, e);
+    }
+  }
+
+  function defineElement(name, ctor) {
+    const registryAtLoad = customElements;
+    if (!registryAtLoad.get(name)) {
+      registryAtLoad.define(name, ctor);
+    }
+    registryAtLoad.whenDefined("home-assistant").then(() => _healElementDefine(name, ctor, "ha-boot signal"));
+    setTimeout(() => _healElementDefine(name, ctor, "fallback timer"), DEFINE_FALLBACK_DELAY_MS);
+  }
 
   const DOMAIN = "life_events";
 
@@ -3581,12 +3619,12 @@
   // ---------------------------------------------------------------------
   // Registration
   // ---------------------------------------------------------------------
-  customElements.define("life-events-upcoming-card", LifeEventsUpcomingCard);
-  customElements.define("life-events-upcoming-card-editor", LifeEventsUpcomingCardEditor);
-  customElements.define("life-events-month-card", LifeEventsMonthCard);
-  customElements.define("life-events-month-card-editor", LifeEventsMonthCardEditor);
-  customElements.define("life-events-manage-card", LifeEventsManageCard);
-  customElements.define("life-events-manage-card-editor", LifeEventsManageCardEditor);
+  defineElement("life-events-upcoming-card", LifeEventsUpcomingCard);
+  defineElement("life-events-upcoming-card-editor", LifeEventsUpcomingCardEditor);
+  defineElement("life-events-month-card", LifeEventsMonthCard);
+  defineElement("life-events-month-card-editor", LifeEventsMonthCardEditor);
+  defineElement("life-events-manage-card", LifeEventsManageCard);
+  defineElement("life-events-manage-card-editor", LifeEventsManageCardEditor);
 
   // These 3 entries populate HA's "Add card" picker, which renders before
   // any card ever gets a `hass` object - there's no language to detect yet,

@@ -4,6 +4,55 @@ All notable changes to Life Events are documented here. Development happens
 in beta releases (`X.Y.Z-beta.N`) between occasional real releases, where
 this file is consolidated into one summary per real version.
 
+## 1.0.2
+
+Root-caused the "still needs a hard refresh after a restart, even after 1.0.1" reports properly
+this time - 1.0.1's `after_dependencies` fix was real but incomplete, and turned out to be
+masking a second, unrelated bug the whole time.
+
+### Fixed
+- **The Lovelace resource registration added in 1.0.1 never actually worked.** It checked
+  `lovelace.mode`, but current Home Assistant Core's `LovelaceData` object doesn't have a
+  `mode` attribute at all - it's called `resource_mode`. Every single registration attempt hit
+  `AttributeError`, was swallowed by a broad exception handler, and silently fell back to the
+  older `add_extra_js_url` injection method - unconditionally, not just "when Lovelace resources
+  aren't loaded yet" as intended. `after_dependencies` was correct but couldn't matter, since the
+  code path it was protecting was never actually being used.
+- **Also removed an unnecessary pre-check that stayed on our previous list of suspects too
+  long:** the code separately bailed out whenever `lovelace.resources.loaded` was still False
+  "to avoid blocking config entry setup." Home Assistant Core's own resource-collection methods
+  (`async_create_item`/`async_update_item`) already load themselves safely on first use -
+  bailing out early threw away a case they already handled correctly. Removed; registration now
+  explicitly ensures the resource collection is loaded before checking for an existing entry,
+  which also fixes a related latent bug where an early call could have seen an empty
+  not-yet-loaded list and created a duplicate resource entry instead of finding the real one.
+- **Card registration self-heals a known Home Assistant frontend bug**
+  ([frontend#52960](https://github.com/home-assistant/frontend/issues/52960), community-diagnosed
+  and fixed, not yet resolved upstream as of this release): HA 2026.8's frontend installs a
+  scoped custom-element-registry polyfill during boot, replacing `window.customElements`. If
+  this card's script evaluates before that swap - a cold-load timing race, which is also why a
+  normal refresh doesn't reliably fix it while Ctrl+Shift+R often "helps" (it just shifts the
+  timing, not the actual cause) - its custom elements register into the *native* registry, which
+  the polyfill's `get()`/`whenDefined()` then never sees, and Home Assistant shows "Configuration
+  error" even though the element is genuinely defined. Each card now re-verifies itself once
+  Home Assistant's own boot signal fires (plus a fallback timer) and re-registers through
+  whichever registry actually won the race if needed.
+- This does **not** claim to eliminate every possible timing scenario - the resource-registration
+  fix removes our own bug, and the customElements self-heal covers the specific upstream race
+  that's currently diagnosed, but Home Assistant's frontend has a second, separate open issue
+  ([frontend#52570](https://github.com/home-assistant/frontend/issues/52570)) about custom
+  modules loading un-awaited in panel-mode dashboards and `custom:` strategies specifically,
+  which this integration doesn't use and can't work around from the integration side.
+- Added DEBUG-level logging throughout resource registration (existing entry found, already
+  current, updated, created, fell back to `add_extra_js_url`) for anyone who needs to trace a
+  future startup issue without guessing.
+
+### Changed
+- **Unified the card-serving `HomeAssistantView`** with ha-kids-credits' equivalent - moved from
+  `__init__.py` into `frontend.py`, single fixed file path instead of a wildcard directory route
+  (only the one JS file was ever actually served at runtime; `translations/*.json` under `www/`
+  is a build-time-only source, bundled into the JS, never fetched on its own).
+
 ## 1.0.1
 
 ### Fixed

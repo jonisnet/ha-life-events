@@ -14,22 +14,19 @@ DOMAIN, since our own domain no longer shares the old integration's name.
 from __future__ import annotations
 
 import logging
-import mimetypes
 from pathlib import Path
 
 import voluptuous as vol
-from aiohttp import web
 
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_component import EntityComponent
-from homeassistant.helpers.http import HomeAssistantView
 from homeassistant.loader import async_get_integration
 
 from .const import CONF_ATTRIBUTES, CONF_BIRTHDAYS, CONF_GLOBAL_CONFIG, DOMAIN, LEGACY_YAML_KEY
-from .frontend import LovelaceResourceRegistration
+from .frontend import LifeEventsCardView, LovelaceResourceRegistration
 from .manager import LifeEventsManager
 from .services import async_register_services, async_unregister_services
 
@@ -134,47 +131,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-class _LifeEventsStaticView(HomeAssistantView):
-    """Serve custom_components/life_events/www/*, always with Cache-Control: no-store.
-
-    HA's built-in static-path registration (StaticPathConfig/
-    register_static_path) only offers a binary choice: a 1-month "public"
-    cache header, or no Cache-Control header at all. Neither actually
-    prevents staleness on a tab that never does a fresh page load (e.g. a
-    kiosk tablet left open for days) - the cache-busting ?v=<version> query
-    string on the script URL only gets re-read when the *page* reloads and
-    re-emits that URL; an already-open tab never asks again, regardless of
-    what caching header the file was served with. no-store closes that gap
-    at the root: nothing is allowed to cache this response at all, so
-    there's no stale copy left anywhere to serve back next time.
-    """
-
-    url = f"{FRONTEND_URL_BASE}/{{filename:.+}}"
-    name = "life_events:static"
-    requires_auth = False
-
-    def __init__(self, www_path: Path) -> None:
-        self._www_path = www_path.resolve()
-
-    async def get(self, request: web.Request, filename: str) -> web.Response:
-        target = (self._www_path / filename).resolve()
-        try:
-            target.relative_to(self._www_path)
-        except ValueError:
-            raise web.HTTPForbidden from None
-        if not target.is_file():
-            raise web.HTTPNotFound from None
-
-        hass: HomeAssistant = request.app["hass"]
-        data = await hass.async_add_executor_job(target.read_bytes)
-        content_type, _ = mimetypes.guess_type(str(target))
-        return web.Response(
-            body=data,
-            content_type=content_type or "application/octet-stream",
-            headers={"Cache-Control": "no-store"},
-        )
-
-
 async def _async_register_frontend(hass: HomeAssistant) -> None:
     """Serve the bundled Lovelace cards and register them as a frontend resource."""
     if hass.data.get(f"{DOMAIN}_frontend_registered"):
@@ -185,7 +141,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     integration = await async_get_integration(hass, DOMAIN)
     js_path = f"{FRONTEND_URL_BASE}/{CARD_FILENAME}"
 
-    hass.http.register_view(_LifeEventsStaticView(www_path))
+    hass.http.register_view(LifeEventsCardView(js_path, www_path / CARD_FILENAME))
 
     # Prefer registering as a real Lovelace resource - only fall back to the
     # always-works-but-cache-flaky add_extra_js_url injection if that isn't
@@ -200,6 +156,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
             from homeassistant.components.frontend import add_extra_js_url
 
             add_extra_js_url(hass, js_url)
+            _LOGGER.debug("Registered %s via add_extra_js_url fallback", js_url)
         except ImportError:
             pass
 
