@@ -1,6 +1,7 @@
 {
     "domain": "life_events",
     "name": "Life Events",
+    "categories": ["productivity_information.calendars_todos"],
     "documentation": "https://github.com/jonisnet/ha-life-events",
     "issue_tracker": "https://github.com/jonisnet/ha-life-events/issues",
     "dependencies": [],

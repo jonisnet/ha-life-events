@@ -22,14 +22,23 @@ better. The domain also changed, from `birthdays` to `life_events` — see
 
 ## Installation
 
-### HACS (recommended)
+### Via the Marketplace (recommended)
 
-1. Go to integrations
-2. Press the dotted menu in the top right corner
-3. Choose custom repositories
-4. Add the URL to this repository
-5. Choose category `Integration`
-6. Click add
+Home Assistant 2026.11 and newer have HACS built in as the **Marketplace**.
+
+[![Open in the Marketplace](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jonisnet&repository=ha-life-events&category=integration)
+
+1. Click the button above, or go to **Settings → Marketplace → Add from link** and enter `https://github.com/jonisnet/ha-life-events` (this needs the Marketplace's GitHub connection)
+2. Install **Life Events**
+3. Restart Home Assistant when the Marketplace asks for it (a repair offers the restart)
+
+### Via HACS (Home Assistant before 2026.11)
+
+1. Go to **HACS → Integrations → ⋮ → Custom repositories**
+2. Add `https://github.com/jonisnet/ha-life-events` with category **Integration**
+3. Search for **Life Events**, install it and restart Home Assistant
+
+On updating to Home Assistant 2026.11, an installation from HACS moves to the Marketplace by itself.
 
 ### Manual
 
