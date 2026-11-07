@@ -1,14 +1,14 @@
 {
     "domain": "life_events",
     "name": "Life Events",
-    "categories": ["productivity_information.calendars_todos"],
-    "documentation": "https://github.com/jonisnet/ha-life-events",
-    "issue_tracker": "https://github.com/jonisnet/ha-life-events/issues",
-    "dependencies": ["http"],
     "after_dependencies": ["lovelace"],
+    "categories": ["productivity_information.calendars_todos"],
     "codeowners": ["@jonisnet"],
-    "requirements": [],
     "config_flow": true,
+    "dependencies": ["http"],
+    "documentation": "https://github.com/jonisnet/ha-life-events",
     "iot_class": "local_push",
+    "issue_tracker": "https://github.com/jonisnet/ha-life-events/issues",
+    "requirements": [],
     "version": "1.0.3"
 }
