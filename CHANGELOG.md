@@ -4,6 +4,18 @@ All notable changes to Life Events are documented here. Development happens
 in beta releases (`X.Y.Z-beta.N`) between occasional real releases, where
 this file is consolidated into one summary per real version.
 
+## 1.0.3
+
+### Fixed
+- **Declared the `http` dependency.** The integration serves its card files through Home
+  Assistant's web server but did not list `http` in its manifest, which hassfest now reports
+  as an error. Home Assistant always loads `http` first, so nothing changes for you.
+
+### Changed
+- **Installation from the Marketplace.** The README describes installing from the Marketplace
+  that replaces HACS in Home Assistant 2026.11, with HACS kept for older versions. The manifest
+  has a Marketplace category, and HACS and hassfest validation run on every push.
+
 ## 1.0.2
 
 Root-caused the "still needs a hard refresh after a restart, even after 1.0.1" reports properly
