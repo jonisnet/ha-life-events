@@ -21,8 +21,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # Remove once the repository has a LICENSE file.
-          ignore: license
 
   hassfest:
     name: Validate with hassfest
